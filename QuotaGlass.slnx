@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="src/QuotaGlass/QuotaGlass.csproj" />
+  <Project Path="tests/QuotaGlass.SmokeTests/QuotaGlass.SmokeTests.csproj" />
+</Solution>
