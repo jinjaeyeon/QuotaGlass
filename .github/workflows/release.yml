@@ -93,7 +93,7 @@ jobs:
         shell: pwsh
         run: |
           $version = '${{ steps.version.outputs.version }}'
-          $assetBase = "QuotaGlass-$version-win-x64-framework-dependent"
+          $assetBase = "QuotaGlass-$version-win-x64"
           $exePath = "artifacts/$assetBase.exe"
           $zipPath = "artifacts/$assetBase.zip"
           $checksumPath = "artifacts/$assetBase.sha256"
