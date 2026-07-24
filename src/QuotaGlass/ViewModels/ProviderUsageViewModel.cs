@@ -22,7 +22,6 @@ public sealed class ProviderUsageViewModel
         PrimaryMeter = Meters.FirstOrDefault();
         SecondaryMeters = Meters.Skip(1).ToArray();
         CompactMeters = Meters.Take(2).ToArray();
-        CompactTitle = FormatCompactTitle(DisplayName);
         CompactToolTip = BuildCompactToolTip();
     }
 
@@ -38,7 +37,6 @@ public sealed class ProviderUsageViewModel
     public MeterUsageViewModel? PrimaryMeter { get; }
     public IReadOnlyList<MeterUsageViewModel> SecondaryMeters { get; }
     public IReadOnlyList<MeterUsageViewModel> CompactMeters { get; }
-    public string CompactTitle { get; }
     public string CompactToolTip { get; }
     public bool HasUsage => PrimaryMeter is not null;
 
@@ -54,9 +52,4 @@ public sealed class ProviderUsageViewModel
             (meter.IsWarning ? " ⚠" : string.Empty));
         return $"{DisplayName}\n{string.Join("\n", meters)}\n클릭해서 전체 보기";
     }
-
-    private static string FormatCompactTitle(string displayName) =>
-        displayName
-            .Replace("Claude Code", "Claude", StringComparison.Ordinal)
-            .Replace("JetBrains AI", "JetBrains", StringComparison.Ordinal);
 }
