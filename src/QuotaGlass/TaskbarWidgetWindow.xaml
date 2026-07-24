@@ -1,4 +1,5 @@
 <Window x:Class="QuotaGlass.TaskbarWidgetWindow"
+        x:Name="WidgetRoot"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="QuotaGlass 작업표시줄 사용량"
@@ -163,7 +164,9 @@
             MouseLeftButtonUp="WidgetChrome_MouseLeftButtonUp"
             ToolTip="클릭: 전체 보기 · 드래그: 작업표시줄 안에서 이동">
         <Border.ContextMenu>
-            <ContextMenu Style="{StaticResource WidgetContextMenuStyle}">
+            <ContextMenu x:Name="WidgetContextMenu"
+                         Style="{StaticResource WidgetContextMenuStyle}"
+                         Opened="WidgetContextMenu_Opened">
                 <ContextMenu.Resources>
                     <Style TargetType="MenuItem"
                            BasedOn="{StaticResource WidgetMenuItemStyle}" />
@@ -186,6 +189,17 @@
                                    VerticalAlignment="Center"
                                    FontSize="14"
                                    Text="↻" />
+                    </MenuItem.Icon>
+                </MenuItem>
+                <Separator />
+                <MenuItem x:Name="ProviderVisibilityHeading"
+                          Header="위젯 표시 항목"
+                          IsEnabled="False">
+                    <MenuItem.Icon>
+                        <TextBlock HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   FontSize="12"
+                                   Text="◉" />
                     </MenuItem.Icon>
                 </MenuItem>
                 <Separator />
@@ -212,12 +226,12 @@
             </ContextMenu>
         </Border.ContextMenu>
         <Grid>
-            <ItemsControl ItemsSource="{Binding Providers}">
+            <ItemsControl ItemsSource="{Binding WidgetProviders, ElementName=WidgetRoot}">
                 <ItemsControl.Style>
                     <Style TargetType="ItemsControl">
                         <Setter Property="Visibility" Value="Visible" />
                         <Style.Triggers>
-                            <DataTrigger Binding="{Binding Providers.Count}"
+                            <DataTrigger Binding="{Binding WidgetProviders.Count, ElementName=WidgetRoot}"
                                          Value="0">
                                 <Setter Property="Visibility"
                                         Value="Collapsed" />
@@ -325,7 +339,7 @@
                         <Setter Property="Visibility"
                                 Value="Collapsed" />
                         <Style.Triggers>
-                            <DataTrigger Binding="{Binding Providers.Count}"
+                            <DataTrigger Binding="{Binding WidgetProviders.Count, ElementName=WidgetRoot}"
                                          Value="0">
                                 <Setter Property="Visibility"
                                         Value="Visible" />

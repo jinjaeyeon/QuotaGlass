@@ -1,3 +1,5 @@
+using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
@@ -7,6 +9,8 @@ using System.Windows.Threading;
 using Microsoft.Win32;
 using QuotaGlass.Services;
 using QuotaGlass.ViewModels;
+using WpfMenuItem = System.Windows.Controls.MenuItem;
+using WpfTextBlock = System.Windows.Controls.TextBlock;
 
 namespace QuotaGlass;
 
@@ -21,11 +25,17 @@ public partial class TaskbarWidgetWindow : Window
     private const uint SwpNoOwnerZOrder = 0x0200;
     private const uint GwHwndNext = 2;
     private static readonly nint HwndTopmost = new(-1);
+    private static readonly string[] DefaultProviderIds =
+    [
+        "claude-code",
+        "codex"
+    ];
 
     private readonly Action _openFullWindow;
     private readonly Action _exitApplication;
     private readonly MainViewModel _viewModel;
     private readonly DispatcherTimer _positionTimer;
+    private readonly HashSet<string> _selectedProviderIds;
     private double? _positionRatio;
     private NativePoint _dragStartCursor;
     private NativeRect _dragStartWindow;
@@ -34,6 +44,11 @@ public partial class TaskbarWidgetWindow : Window
     private bool _isPointerDown;
     private bool _isDragging;
     private bool _isClosed;
+
+    public ObservableCollection<ProviderUsageViewModel> WidgetProviders
+    {
+        get;
+    } = [];
 
     public TaskbarWidgetWindow(
         MainViewModel viewModel,
@@ -46,6 +61,10 @@ public partial class TaskbarWidgetWindow : Window
         _viewModel = viewModel;
         _openFullWindow = openFullWindow;
         _exitApplication = exitApplication;
+        _selectedProviderIds = TaskbarWidgetProviderStore.Load()
+            ?? new HashSet<string>(
+                DefaultProviderIds,
+                StringComparer.Ordinal);
         _positionRatio = TaskbarWidgetPlacementStore.Load();
         _positionTimer = new DispatcherTimer
         {
@@ -56,7 +75,9 @@ public partial class TaskbarWidgetWindow : Window
         SourceInitialized += OnSourceInitialized;
         Loaded += OnLoaded;
         SizeChanged += OnSizeChanged;
+        _viewModel.Providers.CollectionChanged += OnProvidersChanged;
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
+        UpdateWidgetProviders();
     }
 
     public void CloseForExit()
@@ -214,6 +235,64 @@ public partial class TaskbarWidgetWindow : Window
         object sender,
         RoutedEventArgs e) =>
         _viewModel.RefreshCommand.Execute(null);
+
+    private void WidgetContextMenu_Opened(
+        object sender,
+        RoutedEventArgs e)
+    {
+        for (var index = WidgetContextMenu.Items.Count - 1; index >= 0; index--)
+        {
+            if (WidgetContextMenu.Items[index] is WpfMenuItem
+                {
+                    Tag: ProviderMenuTag
+                })
+            {
+                WidgetContextMenu.Items.RemoveAt(index);
+            }
+        }
+
+        var insertionIndex =
+            WidgetContextMenu.Items.IndexOf(ProviderVisibilityHeading) + 1;
+        foreach (var provider in _viewModel.Providers
+                     .GroupBy(item => item.Provider, StringComparer.Ordinal)
+                     .Select(group => group.First()))
+        {
+            var icon = new WpfTextBlock
+            {
+                HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                FontSize = 12,
+                Text = _selectedProviderIds.Contains(provider.Provider)
+                    ? "✓"
+                    : string.Empty
+            };
+            var item = new WpfMenuItem
+            {
+                Header = provider.DisplayName,
+                Icon = icon,
+                IsCheckable = true,
+                IsChecked = _selectedProviderIds.Contains(provider.Provider),
+                StaysOpenOnClick = true,
+                Tag = new ProviderMenuTag(provider.Provider)
+            };
+            item.Click += (_, _) =>
+            {
+                if (item.IsChecked)
+                {
+                    _selectedProviderIds.Add(provider.Provider);
+                }
+                else
+                {
+                    _selectedProviderIds.Remove(provider.Provider);
+                }
+
+                icon.Text = item.IsChecked ? "✓" : string.Empty;
+                TaskbarWidgetProviderStore.Save(_selectedProviderIds);
+                UpdateWidgetProviders();
+            };
+            WidgetContextMenu.Items.Insert(insertionIndex++, item);
+        }
+    }
 
     private void ResetPlacementMenuItem_Click(
         object sender,
@@ -403,14 +482,72 @@ public partial class TaskbarWidgetWindow : Window
         TaskbarWidgetPlacementStore.Save(_positionRatio.Value);
     }
 
+    private void OnProvidersChanged(
+        object? sender,
+        NotifyCollectionChangedEventArgs e) =>
+        UpdateWidgetProviders();
+
+    private void UpdateWidgetProviders()
+    {
+        var expected = _viewModel.Providers
+            .Where(provider =>
+                _selectedProviderIds.Contains(provider.Provider))
+            .ToArray();
+
+        for (var index = WidgetProviders.Count - 1; index >= 0; index--)
+        {
+            if (expected.All(provider =>
+                    provider.Provider != WidgetProviders[index].Provider))
+            {
+                WidgetProviders.RemoveAt(index);
+            }
+        }
+
+        for (var index = 0; index < expected.Length; index++)
+        {
+            if (index < WidgetProviders.Count &&
+                WidgetProviders[index].Provider == expected[index].Provider)
+            {
+                WidgetProviders[index] = expected[index];
+                continue;
+            }
+
+            var existingIndex = -1;
+            for (var candidate = index + 1;
+                 candidate < WidgetProviders.Count;
+                 candidate++)
+            {
+                if (WidgetProviders[candidate].Provider ==
+                    expected[index].Provider)
+                {
+                    existingIndex = candidate;
+                    break;
+                }
+            }
+
+            if (existingIndex >= 0)
+            {
+                WidgetProviders.Move(existingIndex, index);
+                WidgetProviders[index] = expected[index];
+            }
+            else
+            {
+                WidgetProviders.Insert(index, expected[index]);
+            }
+        }
+    }
+
     protected override void OnClosed(EventArgs e)
     {
         _isClosed = true;
         _positionTimer.Stop();
         _positionTimer.Tick -= OnPositionTimerTick;
+        _viewModel.Providers.CollectionChanged -= OnProvidersChanged;
         SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
         base.OnClosed(e);
     }
+
+    private sealed record ProviderMenuTag(string ProviderId);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern nint FindWindow(
