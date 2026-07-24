@@ -9,6 +9,7 @@ public sealed class ProviderUsageViewModel
         Provider = snapshot.Provider;
         DisplayName = snapshot.DisplayName;
         IconText = snapshot.IconText;
+        IconGeometry = AgentIconCatalog.Find(snapshot.Provider);
         AccountLabel = snapshot.AccountLabel;
         Source = snapshot.Source;
         StatusMessage = snapshot.StatusMessage;
@@ -28,6 +29,8 @@ public sealed class ProviderUsageViewModel
     public string Provider { get; }
     public string DisplayName { get; }
     public string IconText { get; }
+    public System.Windows.Media.Geometry? IconGeometry { get; }
+    public bool HasVectorIcon => IconGeometry is not null;
     public string AccountLabel { get; }
     public string Source { get; }
     public string? StatusMessage { get; }

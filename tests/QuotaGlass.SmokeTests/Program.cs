@@ -35,6 +35,12 @@ Require(
     streamedResults.Select(result => result.ProviderIndex).Distinct().Count() == 5,
     "provider 완료 순서 갱신 인덱스");
 Require(snapshots.All(snapshot => snapshot.Meters.Count > 0), "provider별 meter 생성");
+var providerViewModels = snapshots
+    .Select(snapshot => new ProviderUsageViewModel(snapshot, now))
+    .ToArray();
+Require(
+    providerViewModels.All(provider => provider.HasVectorIcon),
+    "제공된 에이전트 SVG geometry 연결");
 Require(
     snapshots.Single(snapshot => snapshot.Provider == "claude-code").Meters.Count == 2,
     "Claude Code 5시간/주간 meter");
