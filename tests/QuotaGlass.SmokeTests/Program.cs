@@ -243,6 +243,13 @@ var exitThread = new Thread(() =>
                     System.Reflection.BindingFlags.Instance |
                     System.Reflection.BindingFlags.NonPublic);
                 var widget = widgetField?.GetValue(window);
+                Require(
+                    window is { IsVisible: false } &&
+                    widget is QuotaGlass.TaskbarWidgetWindow
+                    {
+                        IsVisible: true
+                    },
+                    "앱 시작 시 메인 창 숨김 및 위젯 표시");
                 var exitMenuMethod = typeof(
                     QuotaGlass.TaskbarWidgetWindow).GetMethod(
                     "ExitMenuItem_Click",

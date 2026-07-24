@@ -1,0 +1,125 @@
+name: Windows Release
+
+on:
+  push:
+    branches:
+      - release
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: quota-glass-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish Windows release
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Calculate next version
+        id: version
+        shell: pwsh
+        run: |
+          $versions = git tag --list | ForEach-Object {
+            if ($_ -match '^v(\d+)\.(\d+)\.(\d+)$') {
+              [PSCustomObject]@{
+                Major = [int]$Matches[1]
+                Minor = [int]$Matches[2]
+                Patch = [int]$Matches[3]
+              }
+            }
+          }
+
+          $latest = $versions |
+            Sort-Object Major, Minor, Patch -Descending |
+            Select-Object -First 1
+
+          if ($null -eq $latest) {
+            $version = '0.1.0'
+          }
+          else {
+            $nextPatch = $latest.Patch + 1
+            $version = "$($latest.Major).$($latest.Minor).$nextPatch"
+          }
+
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "tag=v$version" >> $env:GITHUB_OUTPUT
+
+      - name: Restore
+        run: dotnet restore QuotaGlass.slnx
+
+      - name: Build
+        run: >
+          dotnet build QuotaGlass.slnx
+          --configuration Release
+          --no-restore
+          -p:Version=${{ steps.version.outputs.version }}
+
+      - name: Run smoke tests
+        run: >
+          dotnet run
+          --project tests/QuotaGlass.SmokeTests/QuotaGlass.SmokeTests.csproj
+          --configuration Release
+          --no-build
+
+      - name: Publish framework-dependent Windows x64 build
+        shell: pwsh
+        run: |
+          dotnet publish src/QuotaGlass/QuotaGlass.csproj `
+            --configuration Release `
+            --runtime win-x64 `
+            --self-contained false `
+            -p:Version=${{ steps.version.outputs.version }} `
+            -p:PublishSingleFile=true `
+            -p:DebugType=None `
+            -p:DebugSymbols=false `
+            --output artifacts/publish
+
+      - name: Package release assets
+        id: package
+        shell: pwsh
+        run: |
+          $version = '${{ steps.version.outputs.version }}'
+          $assetBase = "QuotaGlass-$version-win-x64-framework-dependent"
+          $exePath = "artifacts/$assetBase.exe"
+          $zipPath = "artifacts/$assetBase.zip"
+          $checksumPath = "artifacts/$assetBase.sha256"
+
+          Copy-Item artifacts/publish/QuotaGlass.exe $exePath
+          Compress-Archive -Path artifacts/publish/* -DestinationPath $zipPath
+
+          @($exePath, $zipPath) | ForEach-Object {
+            $hash = (Get-FileHash $_ -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $(Split-Path $_ -Leaf)"
+          } | Set-Content $checksumPath -Encoding utf8
+
+          "exe=$exePath" >> $env:GITHUB_OUTPUT
+          "zip=$zipPath" >> $env:GITHUB_OUTPUT
+          "checksum=$checksumPath" >> $env:GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create '${{ steps.version.outputs.tag }}' `
+            '${{ steps.package.outputs.exe }}' `
+            '${{ steps.package.outputs.zip }}' `
+            '${{ steps.package.outputs.checksum }}' `
+            --target '${{ github.sha }}' `
+            --title 'QuotaGlass ${{ steps.version.outputs.version }}' `
+            --notes 'Requires the .NET 10 Desktop Runtime (x64).' `
+            --generate-notes

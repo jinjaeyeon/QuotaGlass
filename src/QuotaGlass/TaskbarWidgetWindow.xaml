@@ -212,6 +212,18 @@
                                    Text="⌖" />
                     </MenuItem.Icon>
                 </MenuItem>
+                <MenuItem x:Name="StartWithWindowsMenuItem"
+                          Header="Windows 시작 시 자동 실행"
+                          IsCheckable="True"
+                          StaysOpenOnClick="True"
+                          Click="StartWithWindowsMenuItem_Click">
+                    <MenuItem.Icon>
+                        <TextBlock x:Name="StartWithWindowsCheckGlyph"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   FontSize="12" />
+                    </MenuItem.Icon>
+                </MenuItem>
                 <Separator />
                 <MenuItem Header="종료"
                           Foreground="{StaticResource DangerBrush}"

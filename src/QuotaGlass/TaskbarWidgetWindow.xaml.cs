@@ -240,6 +240,8 @@ public partial class TaskbarWidgetWindow : Window
         object sender,
         RoutedEventArgs e)
     {
+        UpdateWindowsStartupMenuItem();
+
         for (var index = WidgetContextMenu.Items.Count - 1; index >= 0; index--)
         {
             if (WidgetContextMenu.Items[index] is WpfMenuItem
@@ -298,6 +300,15 @@ public partial class TaskbarWidgetWindow : Window
         object sender,
         RoutedEventArgs e) =>
         ResetPlacement();
+
+    private void StartWithWindowsMenuItem_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        WindowsStartupService.TrySetEnabled(
+            StartWithWindowsMenuItem.IsChecked);
+        UpdateWindowsStartupMenuItem();
+    }
 
     private void ExitMenuItem_Click(
         object sender,
@@ -486,6 +497,13 @@ public partial class TaskbarWidgetWindow : Window
         object? sender,
         NotifyCollectionChangedEventArgs e) =>
         UpdateWidgetProviders();
+
+    private void UpdateWindowsStartupMenuItem()
+    {
+        var isEnabled = WindowsStartupService.IsEnabled();
+        StartWithWindowsMenuItem.IsChecked = isEnabled;
+        StartWithWindowsCheckGlyph.Text = isEnabled ? "✓" : string.Empty;
+    }
 
     private void UpdateWidgetProviders()
     {

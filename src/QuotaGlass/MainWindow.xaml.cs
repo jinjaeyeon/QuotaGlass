@@ -36,7 +36,6 @@ public partial class MainWindow : Window
         };
         _dismissTimer.Tick += OnDismissTimerTick;
 
-        Loaded += OnLoaded;
         Deactivated += OnDeactivated;
         SizeChanged += OnSizeChanged;
         Closing += OnClosing;
@@ -44,12 +43,11 @@ public partial class MainWindow : Window
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
     }
 
-    private async void OnLoaded(object sender, RoutedEventArgs e)
+    internal void StartHidden()
     {
-        PositionAtBottomRight();
         _taskbarWidget.Show();
         _dismissTimer.Start();
-        await _viewModel.RefreshAsync();
+        _ = _viewModel.RefreshAsync();
     }
 
     private void PositionAtBottomRight()

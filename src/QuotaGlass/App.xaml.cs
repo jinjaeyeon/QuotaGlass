@@ -46,7 +46,7 @@ public partial class App : System.Windows.Application
 
         _mainWindow = new MainWindow();
         MainWindow = _mainWindow;
-        _mainWindow.Show();
+        _mainWindow.StartHidden();
     }
 
     public void RequestExit()

@@ -2,6 +2,7 @@
 **/obj/
 .idea/
 .vs/
+artifacts/
 *.user
 *.suo
 *_wpftmp.csproj
