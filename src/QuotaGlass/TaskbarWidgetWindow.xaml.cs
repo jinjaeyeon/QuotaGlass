@@ -241,6 +241,7 @@ public partial class TaskbarWidgetWindow : Window
         RoutedEventArgs e)
     {
         UpdateWindowsStartupMenuItem();
+        UpdateThemeMenuItems();
 
         for (var index = WidgetContextMenu.Items.Count - 1; index >= 0; index--)
         {
@@ -309,6 +310,21 @@ public partial class TaskbarWidgetWindow : Window
             StartWithWindowsMenuItem.IsChecked);
         UpdateWindowsStartupMenuItem();
     }
+
+    private void LightThemeMenuItem_Click(
+        object sender,
+        RoutedEventArgs e) =>
+        SetTheme(AppThemeMode.Light);
+
+    private void DarkThemeMenuItem_Click(
+        object sender,
+        RoutedEventArgs e) =>
+        SetTheme(AppThemeMode.Dark);
+
+    private void SystemThemeMenuItem_Click(
+        object sender,
+        RoutedEventArgs e) =>
+        SetTheme(AppThemeMode.System);
 
     private void ExitMenuItem_Click(
         object sender,
@@ -503,6 +519,36 @@ public partial class TaskbarWidgetWindow : Window
         var isEnabled = WindowsStartupService.IsEnabled();
         StartWithWindowsMenuItem.IsChecked = isEnabled;
         StartWithWindowsCheckGlyph.Text = isEnabled ? "✓" : string.Empty;
+    }
+
+    private void SetTheme(AppThemeMode mode)
+    {
+        if (System.Windows.Application.Current is not App application)
+        {
+            return;
+        }
+
+        application.Theme.SetMode(mode);
+        UpdateThemeMenuItems();
+    }
+
+    private void UpdateThemeMenuItems()
+    {
+        if (System.Windows.Application.Current is not App application)
+        {
+            return;
+        }
+
+        var mode = application.Theme.CurrentMode;
+        LightThemeMenuItem.IsChecked = mode == AppThemeMode.Light;
+        DarkThemeMenuItem.IsChecked = mode == AppThemeMode.Dark;
+        SystemThemeMenuItem.IsChecked = mode == AppThemeMode.System;
+        LightThemeCheckGlyph.Text =
+            LightThemeMenuItem.IsChecked ? "✓" : string.Empty;
+        DarkThemeCheckGlyph.Text =
+            DarkThemeMenuItem.IsChecked ? "✓" : string.Empty;
+        SystemThemeCheckGlyph.Text =
+            SystemThemeMenuItem.IsChecked ? "✓" : string.Empty;
     }
 
     private void UpdateWidgetProviders()

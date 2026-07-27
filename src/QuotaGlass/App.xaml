@@ -13,11 +13,17 @@
         <SolidColorBrush x:Key="WarningBrush" Color="#FFFFC56D" />
         <SolidColorBrush x:Key="DangerBrush" Color="#FFFF7185" />
         <SolidColorBrush x:Key="TrackBrush" Color="#26FFFFFF" />
+        <SolidColorBrush x:Key="ContextMenuBrush" Color="#FF1C2028" />
+        <SolidColorBrush x:Key="WidgetBrush" Color="#FA161920" />
+        <SolidColorBrush x:Key="IconSurfaceBrush" Color="#20FFFFFF" />
+        <SolidColorBrush x:Key="BadgeBrush" Color="#16FFFFFF" />
+        <SolidColorBrush x:Key="MenuHoverBrush" Color="#26FFFFFF" />
+        <SolidColorBrush x:Key="SeparatorBrush" Color="#28FFFFFF" />
 
         <Style TargetType="Button">
-            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
-            <Setter Property="Background" Value="{StaticResource SurfaceBrush}" />
-            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+            <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="Padding" Value="12,7" />
             <Setter Property="Cursor" Value="Hand" />
@@ -36,7 +42,7 @@
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="Chrome"
                                         Property="Background"
-                                        Value="{StaticResource SurfaceHoverBrush}" />
+                                        Value="{DynamicResource SurfaceHoverBrush}" />
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="Chrome" Property="Opacity" Value="0.75" />

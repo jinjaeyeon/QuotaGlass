@@ -13,6 +13,7 @@ public partial class App : System.Windows.Application
     private MainWindow? _mainWindow;
     private TaskbarWidgetWindow? _taskbarWidget;
     private MainViewModel? _viewModel;
+    private ThemeService? _themeService;
     private Mutex? _singleInstanceMutex;
     private bool _ownsSingleInstanceMutex;
     private int _exitStarted;
@@ -49,6 +50,7 @@ public partial class App : System.Windows.Application
             return;
         }
 
+        _themeService = new ThemeService(this);
         _viewModel = new MainViewModel();
         _taskbarWidget = new TaskbarWidgetWindow(
             _viewModel,
@@ -106,10 +108,16 @@ public partial class App : System.Windows.Application
 
         _singleInstanceMutex?.Dispose();
         _singleInstanceMutex = null;
+        _themeService?.Dispose();
+        _themeService = null;
         _viewModel?.Dispose();
         _viewModel = null;
         base.OnExit(e);
     }
+
+    internal ThemeService Theme =>
+        _themeService ?? throw new InvalidOperationException(
+            "Theme service is not initialized.");
 
     private void ShowFullWindow()
     {

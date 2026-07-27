@@ -18,8 +18,8 @@
         UseLayoutRounding="True">
     <Border Margin="12"
             Padding="20"
-            Background="{StaticResource WindowBrush}"
-            BorderBrush="{StaticResource BorderBrush}"
+            Background="{DynamicResource WindowBrush}"
+            BorderBrush="{DynamicResource BorderBrush}"
             BorderThickness="1"
             CornerRadius="18">
         <Border.Effect>
@@ -46,12 +46,12 @@
                 </Grid.ColumnDefinitions>
 
                 <StackPanel VerticalAlignment="Center">
-                    <TextBlock Foreground="{StaticResource TextBrush}"
+                    <TextBlock Foreground="{DynamicResource TextBrush}"
                                FontSize="20"
                                FontWeight="SemiBold"
                                Text="QuotaGlass" />
                     <TextBlock Margin="0,3,0,0"
-                               Foreground="{StaticResource MutedTextBrush}"
+                               Foreground="{DynamicResource MutedTextBrush}"
                                FontSize="12"
                                Text="{Binding UpdateSummary}" />
                 </StackPanel>
@@ -87,27 +87,27 @@
                                Height="8"
                                RadiusX="3"
                                RadiusY="3"
-                               Fill="{StaticResource SafeBrush}" />
+                               Fill="{DynamicResource SafeBrush}" />
                     <TextBlock Margin="6,0,16,0"
                                VerticalAlignment="Center"
-                               Foreground="{StaticResource MutedTextBrush}"
+                               Foreground="{DynamicResource MutedTextBrush}"
                                FontSize="11"
                                Text="남은 사용량" />
                     <TextBlock VerticalAlignment="Center"
-                               Foreground="{StaticResource TextBrush}"
+                               Foreground="{DynamicResource TextBrush}"
                                FontSize="14"
                                FontWeight="Bold"
                                Text="◆" />
                     <TextBlock Margin="4,0,0,0"
                                VerticalAlignment="Center"
-                               Foreground="{StaticResource MutedTextBrush}"
+                               Foreground="{DynamicResource MutedTextBrush}"
                                FontSize="11"
                                Text="현재 시각의 안정권 기준" />
                 </StackPanel>
 
                 <CheckBox Grid.Column="1"
                           VerticalAlignment="Center"
-                          Foreground="{StaticResource MutedTextBrush}"
+                          Foreground="{DynamicResource MutedTextBrush}"
                           Content="전체 제한"
                           IsChecked="{Binding ShowDetails}" />
             </Grid>
@@ -121,7 +121,7 @@
                         <DataTemplate>
                             <Border Margin="0,0,0,9"
                                     Padding="14"
-                                    Background="{StaticResource SurfaceBrush}"
+                                    Background="{DynamicResource SurfaceBrush}"
                                     CornerRadius="12">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
@@ -142,13 +142,13 @@
                                             Height="34"
                                             HorizontalAlignment="Left"
                                             VerticalAlignment="Top"
-                                            Background="#20FFFFFF"
-                                            BorderBrush="{StaticResource BorderBrush}"
+                                            Background="{DynamicResource IconSurfaceBrush}"
+                                            BorderBrush="{DynamicResource BorderBrush}"
                                             BorderThickness="1"
                                             CornerRadius="9">
                                         <Grid Margin="7">
                                             <Path Data="{Binding IconGeometry}"
-                                                  Fill="{StaticResource TextBrush}"
+                                                  Fill="{DynamicResource TextBrush}"
                                                   Stretch="Uniform">
                                                 <Path.Style>
                                                     <Style TargetType="Path">
@@ -166,7 +166,7 @@
                                             </Path>
                                             <TextBlock HorizontalAlignment="Center"
                                                        VerticalAlignment="Center"
-                                                       Foreground="{StaticResource TextBrush}"
+                                                       Foreground="{DynamicResource TextBrush}"
                                                        FontSize="11"
                                                        FontWeight="SemiBold"
                                                        Text="{Binding IconText}">
@@ -189,16 +189,16 @@
 
                                     <StackPanel Grid.Column="1"
                                                 Orientation="Horizontal">
-                                        <TextBlock Foreground="{StaticResource TextBrush}"
+                                        <TextBlock Foreground="{DynamicResource TextBrush}"
                                                    FontSize="15"
                                                    FontWeight="SemiBold"
                                                    Text="{Binding DisplayName}" />
                                         <Border Margin="8,0,0,0"
                                                 Padding="6,2"
                                                 VerticalAlignment="Center"
-                                                Background="#16FFFFFF"
+                                                Background="{DynamicResource BadgeBrush}"
                                                 CornerRadius="5">
-                                            <TextBlock Foreground="{StaticResource MutedTextBrush}"
+                                            <TextBlock Foreground="{DynamicResource MutedTextBrush}"
                                                        FontSize="10"
                                                        Text="{Binding AccountLabel}" />
                                         </Border>
@@ -207,7 +207,7 @@
                                     <TextBlock Grid.Row="1"
                                                Grid.Column="1"
                                                Margin="0,3,0,0"
-                                               Foreground="{StaticResource MutedTextBrush}"
+                                               Foreground="{DynamicResource MutedTextBrush}"
                                                FontSize="11"
                                                Text="{Binding PrimaryMeter.ResetText}" />
 
@@ -215,7 +215,7 @@
                                                Grid.Column="2"
                                                Margin="18,0,0,0"
                                                VerticalAlignment="Center"
-                                               Foreground="{StaticResource TextBrush}"
+                                               Foreground="{DynamicResource TextBrush}"
                                                FontSize="14"
                                                FontWeight="SemiBold"
                                                Text="{Binding PrimaryMeter.RemainingText}">
@@ -238,7 +238,11 @@
                                                             Margin="0,10,0,0"
                                                             RemainingRatio="{Binding PrimaryMeter.RemainingRatio}"
                                                             SafeRemainingRatio="{Binding PrimaryMeter.SafeRemainingRatio}"
-                                                            IsWarning="{Binding PrimaryMeter.IsWarning}">
+                                                            IsWarning="{Binding PrimaryMeter.IsWarning}"
+                                                            TrackBrush="{DynamicResource TrackBrush}"
+                                                            SafeBrush="{DynamicResource SafeBrush}"
+                                                            WarningBrush="{DynamicResource DangerBrush}"
+                                                            MarkerBrush="{DynamicResource TextBrush}">
                                         <controls:PacedUsageBar.Style>
                                             <Style TargetType="controls:PacedUsageBar">
                                                 <Setter Property="Visibility" Value="Visible" />
@@ -261,7 +265,7 @@
                                         <TextBlock.Style>
                                             <Style TargetType="TextBlock">
                                                 <Setter Property="Foreground"
-                                                        Value="{StaticResource SafeBrush}" />
+                                                        Value="{DynamicResource SafeBrush}" />
                                                 <Setter Property="Visibility" Value="Visible" />
                                                 <Style.Triggers>
                                                     <DataTrigger Binding="{Binding HasUsage}"
@@ -272,12 +276,12 @@
                                                     <DataTrigger Binding="{Binding PrimaryMeter.IsWatch}"
                                                                  Value="True">
                                                         <Setter Property="Foreground"
-                                                                Value="{StaticResource WarningBrush}" />
+                                                                Value="{DynamicResource WarningBrush}" />
                                                     </DataTrigger>
                                                     <DataTrigger Binding="{Binding PrimaryMeter.IsWarning}"
                                                                  Value="True">
                                                         <Setter Property="Foreground"
-                                                                Value="{StaticResource DangerBrush}" />
+                                                                Value="{DynamicResource DangerBrush}" />
                                                     </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>
@@ -288,7 +292,7 @@
                                                Grid.Column="1"
                                                Grid.ColumnSpan="2"
                                                Margin="0,12,0,2"
-                                               Foreground="{StaticResource MutedTextBrush}"
+                                               Foreground="{DynamicResource MutedTextBrush}"
                                                FontSize="12"
                                                Text="{Binding StatusMessage}">
                                         <TextBlock.Style>
@@ -330,7 +334,7 @@
                                                         <ColumnDefinition Width="Auto" />
                                                     </Grid.ColumnDefinitions>
                                                     <TextBlock VerticalAlignment="Center"
-                                                               Foreground="{StaticResource MutedTextBrush}"
+                                                               Foreground="{DynamicResource MutedTextBrush}"
                                                                FontSize="11"
                                                                Margin="0,0,8,0"
                                                                TextTrimming="CharacterEllipsis"
@@ -341,10 +345,14 @@
                                                                             Margin="0,0,10,0"
                                                                             RemainingRatio="{Binding RemainingRatio}"
                                                                             SafeRemainingRatio="{Binding SafeRemainingRatio}"
-                                                                            IsWarning="{Binding IsWarning}" />
+                                                                            IsWarning="{Binding IsWarning}"
+                                                                            TrackBrush="{DynamicResource TrackBrush}"
+                                                                            SafeBrush="{DynamicResource SafeBrush}"
+                                                                            WarningBrush="{DynamicResource DangerBrush}"
+                                                                            MarkerBrush="{DynamicResource TextBrush}" />
                                                     <TextBlock Grid.Column="2"
                                                                VerticalAlignment="Center"
-                                                               Foreground="{StaticResource MutedTextBrush}"
+                                                               Foreground="{DynamicResource MutedTextBrush}"
                                                                FontSize="11"
                                                                Text="{Binding RemainingText}" />
                                                 </Grid>
@@ -361,7 +369,7 @@
             <TextBlock Grid.Row="3"
                        HorizontalAlignment="Right"
                        Margin="0,3,0,0"
-                       Foreground="{StaticResource MutedTextBrush}"
+                       Foreground="{DynamicResource MutedTextBrush}"
                        FontSize="10"
                        Text="경고 기준: 안정권보다 5％p 이상 빠른 소진" />
         </Grid>

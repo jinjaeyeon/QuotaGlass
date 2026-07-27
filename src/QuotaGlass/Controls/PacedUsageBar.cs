@@ -12,10 +12,10 @@ namespace QuotaGlass.Controls;
 
 public sealed class PacedUsageBar : FrameworkElement
 {
-    private static readonly Brush Track = CreateBrush("#28FFFFFF");
-    private static readonly Brush Safe = CreateBrush("#FF78D6A3");
-    private static readonly Brush Warning = CreateBrush("#FFFF7185");
-    private static readonly Brush Marker = CreateBrush("#FFF7F8FA");
+    private static readonly Brush DefaultTrack = CreateBrush("#28FFFFFF");
+    private static readonly Brush DefaultSafe = CreateBrush("#FF78D6A3");
+    private static readonly Brush DefaultWarning = CreateBrush("#FFFF7185");
+    private static readonly Brush DefaultMarker = CreateBrush("#FFF7F8FA");
 
     public static readonly DependencyProperty RemainingRatioProperty =
         DependencyProperty.Register(
@@ -44,6 +44,18 @@ public sealed class PacedUsageBar : FrameworkElement
                 false,
                 FrameworkPropertyMetadataOptions.AffectsRender));
 
+    public static readonly DependencyProperty TrackBrushProperty =
+        RegisterBrush(nameof(TrackBrush), DefaultTrack);
+
+    public static readonly DependencyProperty SafeBrushProperty =
+        RegisterBrush(nameof(SafeBrush), DefaultSafe);
+
+    public static readonly DependencyProperty WarningBrushProperty =
+        RegisterBrush(nameof(WarningBrush), DefaultWarning);
+
+    public static readonly DependencyProperty MarkerBrushProperty =
+        RegisterBrush(nameof(MarkerBrush), DefaultMarker);
+
     public double RemainingRatio
     {
         get => (double)GetValue(RemainingRatioProperty);
@@ -60,6 +72,30 @@ public sealed class PacedUsageBar : FrameworkElement
     {
         get => (bool)GetValue(IsWarningProperty);
         set => SetValue(IsWarningProperty, value);
+    }
+
+    public Brush TrackBrush
+    {
+        get => (Brush)GetValue(TrackBrushProperty);
+        set => SetValue(TrackBrushProperty, value);
+    }
+
+    public Brush SafeBrush
+    {
+        get => (Brush)GetValue(SafeBrushProperty);
+        set => SetValue(SafeBrushProperty, value);
+    }
+
+    public Brush WarningBrush
+    {
+        get => (Brush)GetValue(WarningBrushProperty);
+        set => SetValue(WarningBrushProperty, value);
+    }
+
+    public Brush MarkerBrush
+    {
+        get => (Brush)GetValue(MarkerBrushProperty);
+        set => SetValue(MarkerBrushProperty, value);
     }
 
     protected override Size MeasureOverride(Size availableSize) =>
@@ -90,7 +126,7 @@ public sealed class PacedUsageBar : FrameworkElement
         var safeRemaining = Math.Clamp(SafeRemainingRatio, 0, 1);
 
         drawingContext.DrawRoundedRectangle(
-            Track,
+            TrackBrush,
             null,
             new Rect(horizontalInset, y, drawableWidth, barHeight),
             radius,
@@ -101,7 +137,7 @@ public sealed class PacedUsageBar : FrameworkElement
             var remainingWidth = drawableWidth * remaining;
             var remainingRadius = Math.Min(radius, remainingWidth / 2);
             drawingContext.DrawRoundedRectangle(
-                IsWarning ? Warning : Safe,
+                IsWarning ? WarningBrush : SafeBrush,
                 null,
                 new Rect(
                     horizontalInset,
@@ -113,7 +149,9 @@ public sealed class PacedUsageBar : FrameworkElement
         }
 
         var markerX = horizontalInset + (drawableWidth * safeRemaining);
-        var markerPen = new Pen(IsWarning ? Warning : Marker, 2);
+        var markerPen = new Pen(
+            IsWarning ? WarningBrush : MarkerBrush,
+            2);
         markerPen.Freeze();
 
         drawingContext.DrawLine(
@@ -140,8 +178,22 @@ public sealed class PacedUsageBar : FrameworkElement
         }
 
         diamond.Freeze();
-        drawingContext.DrawGeometry(IsWarning ? Warning : Marker, null, diamond);
+        drawingContext.DrawGeometry(
+            IsWarning ? WarningBrush : MarkerBrush,
+            null,
+            diamond);
     }
+
+    private static DependencyProperty RegisterBrush(
+        string name,
+        Brush defaultValue) =>
+        DependencyProperty.Register(
+            name,
+            typeof(Brush),
+            typeof(PacedUsageBar),
+            new FrameworkPropertyMetadata(
+                defaultValue,
+                FrameworkPropertyMetadataOptions.AffectsRender));
 
     private static Brush CreateBrush(string color)
     {
