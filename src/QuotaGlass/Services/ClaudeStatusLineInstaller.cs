@@ -8,6 +8,8 @@ public static class ClaudeStatusLineInstaller
 {
     private const string BridgeMarker = "--claude-statusline-bridge";
     private const string BridgeScriptName = "claude-statusline-bridge.ps1";
+    private const string BridgeConfigurationName =
+        "claude-statusline-bridge.json";
 
     private const string BridgeScript =
         """
@@ -17,6 +19,7 @@ public static class ClaudeStatusLineInstaller
             $env:QUOTAGLASS_STATE_DIRECTORY
         }
         $inputJson = [Console]::In.ReadToEnd()
+        $payload = $null
 
         try {
             $payload = $inputJson | ConvertFrom-Json
@@ -43,6 +46,20 @@ public static class ClaudeStatusLineInstaller
                 exit 0
             }
         }
+
+        if ($null -ne $payload) {
+            $segments = @(
+                $payload.model.display_name,
+                $(if ([string]::IsNullOrWhiteSpace($payload.workspace.current_dir)) {
+                    $null
+                } else {
+                    Split-Path -Leaf $payload.workspace.current_dir
+                })
+            ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+            if ($segments.Count -gt 0) {
+                Write-Output ($segments -join ' | ')
+            }
+        }
         exit 0
         """;
 
@@ -56,20 +73,20 @@ public static class ClaudeStatusLineInstaller
                     Environment.SpecialFolder.UserProfile),
                 ".claude",
                 "settings.json");
-        if (!File.Exists(settingsPath))
+        var settingsExist = File.Exists(settingsPath);
+        var root = settingsExist
+            ? JsonNode.Parse(File.ReadAllText(settingsPath)) as JsonObject
+            : new JsonObject();
+        if (root is null)
         {
             return;
         }
 
-        var root = JsonNode.Parse(File.ReadAllText(settingsPath)) as JsonObject;
-        var statusLine = root?["statusLine"] as JsonObject;
-        var currentCommand = statusLine?["command"]?.GetValue<string>();
-        if (root is null ||
-            statusLine is null ||
-            string.IsNullOrWhiteSpace(currentCommand))
-        {
-            return;
-        }
+        var statusLine = root["statusLine"] as JsonObject;
+        var currentCommand = statusLine?["command"] is JsonValue commandValue &&
+                             commandValue.TryGetValue<string>(out var command)
+            ? command
+            : null;
 
         var stateDirectory =
             Environment.GetEnvironmentVariable(
@@ -87,6 +104,27 @@ public static class ClaudeStatusLineInstaller
         var bridgeCommand =
             $"powershell.exe -NoProfile -NonInteractive " +
             $"-ExecutionPolicy Bypass -File \"{bridgeScriptPath}\"";
+        var bridgeConfigurationPath = Path.Combine(
+            stateDirectory,
+            BridgeConfigurationName);
+
+        if (string.IsNullOrWhiteSpace(currentCommand))
+        {
+            // status line이 없으면 사용량 페이로드가 전달되지 않으므로 직접 설치한다.
+            BackupSettings(settingsPath, settingsExist);
+            File.Delete(bridgeConfigurationPath);
+            if (statusLine is null)
+            {
+                statusLine = [];
+                root["statusLine"] = statusLine;
+            }
+
+            statusLine["type"] = "command";
+            statusLine["command"] = bridgeCommand;
+            WriteJsonAtomically(settingsPath, root);
+            return;
+        }
+
         var isExistingBridge =
             currentCommand.Contains(
                 BridgeMarker,
@@ -101,7 +139,7 @@ public static class ClaudeStatusLineInstaller
                     bridgeCommand,
                     StringComparison.Ordinal))
             {
-                statusLine["command"] = bridgeCommand;
+                statusLine!["command"] = bridgeCommand;
                 WriteJsonAtomically(settingsPath, root);
             }
 
@@ -112,20 +150,25 @@ public static class ClaudeStatusLineInstaller
         {
             ["originalCommand"] = currentCommand
         };
-        WriteJsonAtomically(
-            Path.Combine(
-                stateDirectory,
-                "claude-statusline-bridge.json"),
-            bridgeConfiguration);
+        WriteJsonAtomically(bridgeConfigurationPath, bridgeConfiguration);
+
+        BackupSettings(settingsPath, settingsExist);
+        statusLine!["command"] = bridgeCommand;
+        WriteJsonAtomically(settingsPath, root);
+    }
+
+    private static void BackupSettings(string settingsPath, bool settingsExist)
+    {
+        if (!settingsExist)
+        {
+            return;
+        }
 
         var backupPath = settingsPath + ".quotaglass.bak";
         if (!File.Exists(backupPath))
         {
             File.Copy(settingsPath, backupPath);
         }
-
-        statusLine["command"] = bridgeCommand;
-        WriteJsonAtomically(settingsPath, root);
     }
 
     private static void WriteJsonAtomically(string path, JsonNode value)

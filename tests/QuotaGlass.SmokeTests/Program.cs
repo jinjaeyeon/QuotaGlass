@@ -1,3 +1,5 @@
+using System.IO;
+using System.Text.Json.Nodes;
 using QuotaGlass.Models;
 using QuotaGlass.Services;
 using QuotaGlass.ViewModels;
@@ -133,6 +135,8 @@ Require(
         item.IsReset &&
         Approximately(item.RemainingRatio, 1)),
     "Claude 초기화 완료 meter를 100%로 전환");
+
+RunStatusLineInstallerTests();
 
 const string antigravityQuotaFixture =
     """
@@ -309,6 +313,157 @@ Require(
 
 Console.WriteLine("QuotaGlass smoke tests passed.");
 return;
+
+void RunStatusLineInstallerTests()
+{
+    var root = Path.Combine(
+        Path.GetTempPath(),
+        $"QuotaGlass.StatusLine.{Guid.NewGuid():N}");
+    var stateDirectory = Path.Combine(root, "state");
+    var settingsPath = Path.Combine(root, ".claude", "settings.json");
+    Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
+    var previousSettingsPath = Environment.GetEnvironmentVariable(
+        "QUOTAGLASS_CLAUDE_SETTINGS_PATH");
+    var previousStateDirectory = Environment.GetEnvironmentVariable(
+        "QUOTAGLASS_STATE_DIRECTORY");
+
+    try
+    {
+        Environment.SetEnvironmentVariable(
+            "QUOTAGLASS_CLAUDE_SETTINGS_PATH",
+            settingsPath);
+        Environment.SetEnvironmentVariable(
+            "QUOTAGLASS_STATE_DIRECTORY",
+            stateDirectory);
+
+        var bridgeScriptPath = Path.Combine(
+            stateDirectory,
+            "claude-statusline-bridge.ps1");
+        var bridgeConfigurationPath = Path.Combine(
+            stateDirectory,
+            "claude-statusline-bridge.json");
+
+        File.WriteAllText(settingsPath, """{ "theme": "dark" }""");
+        ClaudeStatusLineInstaller.EnsureInstalled();
+
+        var settings = ReadJsonObject(settingsPath);
+        Require(
+            File.Exists(bridgeScriptPath),
+            "status line 미설정 시 bridge 스크립트 설치");
+        Require(
+            ReadCommand(settings)?.Contains(
+                bridgeScriptPath,
+                StringComparison.Ordinal) == true,
+            "status line 미설정 시 bridge 명령 등록");
+        Require(
+            settings["theme"]?.GetValue<string>() == "dark",
+            "설치 시 기존 설정 보존");
+        Require(
+            !File.Exists(bridgeConfigurationPath),
+            "신규 설치 시 원본 명령 없음");
+
+        var installedCommand = ReadCommand(settings);
+        ClaudeStatusLineInstaller.EnsureInstalled();
+        Require(
+            ReadCommand(ReadJsonObject(settingsPath)) == installedCommand,
+            "재실행 시 bridge 중첩 없음");
+
+        File.WriteAllText(
+            settingsPath,
+            """{ "statusLine": { "type": "command", "command": "my-status.exe" } }""");
+        ClaudeStatusLineInstaller.EnsureInstalled();
+        Require(
+            ReadCommand(ReadJsonObject(settingsPath))?.Contains(
+                bridgeScriptPath,
+                StringComparison.Ordinal) == true,
+            "기존 status line 래핑");
+        Require(
+            ReadJsonObject(bridgeConfigurationPath)["originalCommand"]
+                ?.GetValue<string>() == "my-status.exe",
+            "기존 status line 명령 보존");
+
+        File.Delete(bridgeConfigurationPath);
+        var statusLineOutput = RunBridgeScript(
+            bridgeScriptPath,
+            stateDirectory,
+            """
+            {
+              "model": { "display_name": "Opus 5" },
+              "workspace": { "current_dir": "D:\\work\\QuotaGlass" },
+              "rate_limits": {
+                "five_hour": { "used_percentage": 12.5, "resets_at": 1784876400 }
+              }
+            }
+            """);
+        var cachePath = Path.Combine(stateDirectory, "claude-rate-limits.json");
+        Require(
+            File.Exists(cachePath),
+            "bridge 스크립트가 rate limit 캐시 기록");
+        Require(
+            ClaudeRateLimitParser.Parse(File.ReadAllText(cachePath)).Count == 1,
+            "캐시된 rate limit 파싱");
+        Require(
+            statusLineOutput.Contains("Opus 5", StringComparison.Ordinal) &&
+            statusLineOutput.Contains("QuotaGlass", StringComparison.Ordinal),
+            "원본 명령이 없을 때 기본 status line 출력");
+    }
+    finally
+    {
+        Environment.SetEnvironmentVariable(
+            "QUOTAGLASS_CLAUDE_SETTINGS_PATH",
+            previousSettingsPath);
+        Environment.SetEnvironmentVariable(
+            "QUOTAGLASS_STATE_DIRECTORY",
+            previousStateDirectory);
+        try
+        {
+            Directory.Delete(root, true);
+        }
+        catch (IOException)
+        {
+            // 임시 폴더 정리는 실패해도 테스트 결과에 영향을 주지 않는다.
+        }
+    }
+
+    static JsonObject ReadJsonObject(string path) =>
+        JsonNode.Parse(File.ReadAllText(path))
+            ?.AsObject()
+        ?? throw new InvalidOperationException($"JSON 객체 아님: {path}");
+
+    static string? ReadCommand(JsonObject settings) =>
+        settings["statusLine"]?["command"]?.GetValue<string>();
+
+    static string RunBridgeScript(
+        string scriptPath,
+        string stateDirectory,
+        string payload)
+    {
+        var startInfo = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = "powershell.exe",
+            UseShellExecute = false,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            CreateNoWindow = true
+        };
+        startInfo.ArgumentList.Add("-NoProfile");
+        startInfo.ArgumentList.Add("-NonInteractive");
+        startInfo.ArgumentList.Add("-ExecutionPolicy");
+        startInfo.ArgumentList.Add("Bypass");
+        startInfo.ArgumentList.Add("-File");
+        startInfo.ArgumentList.Add(scriptPath);
+        startInfo.Environment["QUOTAGLASS_STATE_DIRECTORY"] = stateDirectory;
+
+        using var process = System.Diagnostics.Process.Start(startInfo)
+            ?? throw new InvalidOperationException(
+                "bridge 스크립트를 실행하지 못했습니다.");
+        process.StandardInput.Write(payload);
+        process.StandardInput.Close();
+        var output = process.StandardOutput.ReadToEnd();
+        process.WaitForExit();
+        return output;
+    }
+}
 
 static bool Approximately(double left, double right) =>
     Math.Abs(left - right) < 0.000_001;
