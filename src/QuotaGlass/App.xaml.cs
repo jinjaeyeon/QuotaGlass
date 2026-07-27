@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Threading;
 using QuotaGlass.Services;
+using QuotaGlass.ViewModels;
 
 namespace QuotaGlass;
 
@@ -10,6 +11,8 @@ public partial class App : System.Windows.Application
         @"Local\QuotaGlass.SingleInstance.v1";
 
     private MainWindow? _mainWindow;
+    private TaskbarWidgetWindow? _taskbarWidget;
+    private MainViewModel? _viewModel;
     private Mutex? _singleInstanceMutex;
     private bool _ownsSingleInstanceMutex;
     private int _exitStarted;
@@ -20,6 +23,8 @@ public partial class App : System.Windows.Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        System.Windows.Media.RenderOptions.ProcessRenderMode =
+            System.Windows.Interop.RenderMode.SoftwareOnly;
 
         if (EnforceSingleInstance && !TryAcquireSingleInstance())
         {
@@ -44,9 +49,14 @@ public partial class App : System.Windows.Application
             return;
         }
 
-        _mainWindow = new MainWindow();
-        MainWindow = _mainWindow;
-        _mainWindow.StartHidden();
+        _viewModel = new MainViewModel();
+        _taskbarWidget = new TaskbarWidgetWindow(
+            _viewModel,
+            ShowFullWindow,
+            RequestExit);
+        MainWindow = _taskbarWidget;
+        _taskbarWidget.Show();
+        _ = _viewModel.RefreshAsync();
     }
 
     public void RequestExit()
@@ -68,6 +78,11 @@ public partial class App : System.Windows.Application
                 try
                 {
                     _mainWindow?.CloseForExit();
+                    _mainWindow = null;
+                    _taskbarWidget?.CloseForExit();
+                    _taskbarWidget = null;
+                    _viewModel?.Dispose();
+                    _viewModel = null;
                 }
                 finally
                 {
@@ -91,7 +106,51 @@ public partial class App : System.Windows.Application
 
         _singleInstanceMutex?.Dispose();
         _singleInstanceMutex = null;
+        _viewModel?.Dispose();
+        _viewModel = null;
         base.OnExit(e);
+    }
+
+    private void ShowFullWindow()
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.BeginInvoke(ShowFullWindow);
+            return;
+        }
+
+        if (_mainWindow is null)
+        {
+            if (_viewModel is null || _taskbarWidget is null)
+            {
+                return;
+            }
+
+            _mainWindow = new MainWindow(
+                _viewModel,
+                DismissFullWindow,
+                _taskbarWidget.RestoreAboveTaskbar);
+            MainWindow = _mainWindow;
+        }
+
+        _mainWindow.ShowFullWindow();
+    }
+
+    private void DismissFullWindow()
+    {
+        var window = _mainWindow;
+        if (window is null)
+        {
+            return;
+        }
+
+        _mainWindow = null;
+        window.CloseForDismiss();
+        _taskbarWidget?.RestoreAboveTaskbar();
+        if (_taskbarWidget is not null)
+        {
+            MainWindow = _taskbarWidget;
+        }
     }
 
     private bool TryAcquireSingleInstance()

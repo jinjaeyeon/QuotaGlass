@@ -243,19 +243,44 @@ var exitThread = new Thread(() =>
             System.Windows.Threading.DispatcherPriority.ApplicationIdle,
             () =>
             {
-                var window = application.MainWindow;
-                var widgetField = typeof(QuotaGlass.MainWindow).GetField(
-                    "_taskbarWidget",
+                var mainWindowField = typeof(QuotaGlass.App).GetField(
+                    "_mainWindow",
                     System.Reflection.BindingFlags.Instance |
                     System.Reflection.BindingFlags.NonPublic);
-                var widget = widgetField?.GetValue(window);
+                var widget = application.MainWindow;
                 Require(
-                    window is { IsVisible: false } &&
+                    mainWindowField?.GetValue(application) is null &&
                     widget is QuotaGlass.TaskbarWidgetWindow
                     {
                         IsVisible: true
                     },
-                    "앱 시작 시 메인 창 숨김 및 위젯 표시");
+                    "앱 시작 시 메인 창 지연 생성 및 위젯 표시");
+                var openMenuMethod = typeof(
+                    QuotaGlass.TaskbarWidgetWindow).GetMethod(
+                    "OpenFullWindowMenuItem_Click",
+                    System.Reflection.BindingFlags.Instance |
+                    System.Reflection.BindingFlags.NonPublic);
+                openMenuMethod?.Invoke(
+                    widget,
+                    [widget, new System.Windows.RoutedEventArgs()]);
+                Require(
+                    mainWindowField?.GetValue(application) is
+                        QuotaGlass.MainWindow
+                        {
+                            IsVisible: true
+                        },
+                    "위젯 클릭 시 메인 창 지연 생성");
+
+                var dismissMethod = typeof(QuotaGlass.App).GetMethod(
+                    "DismissFullWindow",
+                    System.Reflection.BindingFlags.Instance |
+                    System.Reflection.BindingFlags.NonPublic);
+                dismissMethod?.Invoke(application, null);
+                Require(
+                    mainWindowField?.GetValue(application) is null &&
+                    widget.IsVisible,
+                    "메인 창 닫을 때 객체 해제 및 위젯 유지");
+
                 var exitMenuMethod = typeof(
                     QuotaGlass.TaskbarWidgetWindow).GetMethod(
                     "ExitMenuItem_Click",

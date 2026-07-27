@@ -12,24 +12,24 @@ namespace QuotaGlass;
 
 public partial class MainWindow : Window
 {
-    private readonly MainViewModel _viewModel;
-    private readonly TaskbarWidgetWindow _taskbarWidget;
+    private readonly Action _dismissWindow;
+    private readonly Action _restoreWidget;
     private readonly DispatcherTimer _dismissTimer;
     private bool _allowClose;
     private bool _isPositioning;
     private DateTimeOffset _dismissAllowedAt;
 
-    public MainWindow()
+    public MainWindow(
+        MainViewModel viewModel,
+        Action dismissWindow,
+        Action restoreWidget)
     {
         InitializeComponent();
 
-        _viewModel = new MainViewModel();
-        DataContext = _viewModel;
+        _dismissWindow = dismissWindow;
+        _restoreWidget = restoreWidget;
+        DataContext = viewModel;
 
-        _taskbarWidget = new TaskbarWidgetWindow(
-            _viewModel,
-            ShowFullWindow,
-            ExitApplication);
         _dismissTimer = new DispatcherTimer
         {
             Interval = TimeSpan.FromMilliseconds(200)
@@ -41,13 +41,6 @@ public partial class MainWindow : Window
         Closing += OnClosing;
         Closed += OnClosed;
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
-    }
-
-    internal void StartHidden()
-    {
-        _taskbarWidget.Show();
-        _dismissTimer.Start();
-        _ = _viewModel.RefreshAsync();
     }
 
     private void PositionAtBottomRight()
@@ -79,15 +72,9 @@ public partial class MainWindow : Window
     }
 
     private void HideButton_Click(object sender, RoutedEventArgs e) =>
-        HideToTray();
+        _dismissWindow();
 
-    private void HideToTray()
-    {
-        Hide();
-        _taskbarWidget.RestoreAboveTaskbar();
-    }
-
-    private void ShowFullWindow()
+    internal void ShowFullWindow()
     {
         if (!Dispatcher.CheckAccess())
         {
@@ -100,6 +87,7 @@ public partial class MainWindow : Window
             Show();
         }
 
+        _dismissTimer.Start();
         _dismissAllowedAt = DateTimeOffset.UtcNow.AddMilliseconds(700);
         UpdateLayout();
         PositionAtBottomRight();
@@ -122,7 +110,7 @@ public partial class MainWindow : Window
                         new WindowInteropHelper(this).Handle);
                 }
 
-                _taskbarWidget.RestoreAboveTaskbar();
+                _restoreWidget();
             });
     }
 
@@ -156,7 +144,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        HideToTray();
+        _dismissWindow();
     }
 
     private void OnSizeChanged(object sender, SizeChangedEventArgs e) =>
@@ -167,14 +155,6 @@ public partial class MainWindow : Window
         Dispatcher.Invoke(PositionAtBottomRight);
     }
 
-    private void ExitApplication()
-    {
-        if (System.Windows.Application.Current is App application)
-        {
-            application.RequestExit();
-        }
-    }
-
     internal void CloseForExit()
     {
         if (_allowClose)
@@ -183,7 +163,17 @@ public partial class MainWindow : Window
         }
 
         _allowClose = true;
-        _taskbarWidget.CloseForExit();
+        Close();
+    }
+
+    internal void CloseForDismiss()
+    {
+        if (_allowClose)
+        {
+            return;
+        }
+
+        _allowClose = true;
         Close();
     }
 
@@ -195,7 +185,7 @@ public partial class MainWindow : Window
         }
 
         e.Cancel = true;
-        HideToTray();
+        Dispatcher.BeginInvoke(_dismissWindow);
     }
 
     private void OnClosed(object? sender, EventArgs e)
@@ -205,7 +195,6 @@ public partial class MainWindow : Window
         SizeChanged -= OnSizeChanged;
         _dismissTimer.Stop();
         _dismissTimer.Tick -= OnDismissTimerTick;
-        _viewModel.Dispose();
     }
 
     [DllImport("user32.dll")]
