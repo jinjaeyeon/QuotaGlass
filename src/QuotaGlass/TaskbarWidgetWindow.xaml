@@ -70,13 +70,6 @@
                                 BorderBrush="{DynamicResource BorderBrush}"
                                 BorderThickness="1"
                                 CornerRadius="11">
-                            <Border.Effect>
-                                <DropShadowEffect BlurRadius="20"
-                                                  Direction="270"
-                                                  Opacity="0.55"
-                                                  ShadowDepth="6"
-                                                  Color="#E0000000" />
-                            </Border.Effect>
                             <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle" />
                         </Border>
                     </ControlTemplate>
