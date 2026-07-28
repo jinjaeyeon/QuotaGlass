@@ -176,7 +176,11 @@ internal sealed class ThemeService : IDisposable
             ["IconSurfaceBrush"] = "#20FFFFFF",
             ["BadgeBrush"] = "#16FFFFFF",
             ["MenuHoverBrush"] = "#26FFFFFF",
-            ["SeparatorBrush"] = "#28FFFFFF"
+            ["SeparatorBrush"] = "#28FFFFFF",
+            ["ScrollBarTrackBrush"] = "#0FFFFFFF",
+            ["ScrollBarThumbBrush"] = "#4DFFFFFF",
+            ["ScrollBarThumbHoverBrush"] = "#80FFFFFF",
+            ["ScrollBarThumbPressedBrush"] = "#B378D6A3"
         };
 
     private static readonly IReadOnlyDictionary<string, string> LightColors =
@@ -197,6 +201,10 @@ internal sealed class ThemeService : IDisposable
             ["IconSurfaceBrush"] = "#14171A21",
             ["BadgeBrush"] = "#0F171A21",
             ["MenuHoverBrush"] = "#14171A21",
-            ["SeparatorBrush"] = "#1F171A21"
+            ["SeparatorBrush"] = "#1F171A21",
+            ["ScrollBarTrackBrush"] = "#12171A21",
+            ["ScrollBarThumbBrush"] = "#66171A21",
+            ["ScrollBarThumbHoverBrush"] = "#99171A21",
+            ["ScrollBarThumbPressedBrush"] = "#CC238454"
         };
 }

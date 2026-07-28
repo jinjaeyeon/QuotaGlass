@@ -19,6 +19,88 @@
         <SolidColorBrush x:Key="BadgeBrush" Color="#16FFFFFF" />
         <SolidColorBrush x:Key="MenuHoverBrush" Color="#26FFFFFF" />
         <SolidColorBrush x:Key="SeparatorBrush" Color="#28FFFFFF" />
+        <SolidColorBrush x:Key="ScrollBarTrackBrush" Color="#0FFFFFFF" />
+        <SolidColorBrush x:Key="ScrollBarThumbBrush" Color="#4DFFFFFF" />
+        <SolidColorBrush x:Key="ScrollBarThumbHoverBrush" Color="#80FFFFFF" />
+        <SolidColorBrush x:Key="ScrollBarThumbPressedBrush" Color="#B378D6A3" />
+
+        <Style x:Key="GlassScrollBarPageButtonStyle"
+               TargetType="RepeatButton">
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="IsTabStop" Value="False" />
+            <Setter Property="Opacity" Value="0" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RepeatButton">
+                        <Border Background="Transparent" />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="GlassScrollBarThumbStyle"
+               TargetType="Thumb">
+            <Setter Property="MinHeight" Value="36" />
+            <Setter Property="Margin" Value="2" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Thumb">
+                        <Border x:Name="ThumbChrome"
+                                Background="{DynamicResource ScrollBarThumbBrush}"
+                                CornerRadius="3" />
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ThumbChrome"
+                                        Property="Background"
+                                        Value="{DynamicResource ScrollBarThumbHoverBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsDragging" Value="True">
+                                <Setter TargetName="ThumbChrome"
+                                        Property="Background"
+                                        Value="{DynamicResource ScrollBarThumbPressedBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="ThumbChrome"
+                                        Property="Opacity"
+                                        Value="0.25" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="GlassVerticalScrollBarStyle"
+               TargetType="ScrollBar">
+            <Setter Property="Width" Value="10" />
+            <Setter Property="MinWidth" Value="10" />
+            <Setter Property="Margin" Value="8,2,0,2" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Border Background="{DynamicResource ScrollBarTrackBrush}"
+                                CornerRadius="5">
+                            <Track x:Name="PART_Track"
+                                   IsDirectionReversed="True">
+                                <Track.DecreaseRepeatButton>
+                                    <RepeatButton Command="{x:Static ScrollBar.PageUpCommand}"
+                                                  Style="{StaticResource GlassScrollBarPageButtonStyle}" />
+                                </Track.DecreaseRepeatButton>
+                                <Track.Thumb>
+                                    <Thumb Style="{StaticResource GlassScrollBarThumbStyle}" />
+                                </Track.Thumb>
+                                <Track.IncreaseRepeatButton>
+                                    <RepeatButton Command="{x:Static ScrollBar.PageDownCommand}"
+                                                  Style="{StaticResource GlassScrollBarPageButtonStyle}" />
+                                </Track.IncreaseRepeatButton>
+                            </Track>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
         <Style TargetType="Button">
             <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
