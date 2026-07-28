@@ -159,7 +159,8 @@
         <Border.ContextMenu>
             <ContextMenu x:Name="WidgetContextMenu"
                          Style="{StaticResource WidgetContextMenuStyle}"
-                         Opened="WidgetContextMenu_Opened">
+                         Opened="WidgetContextMenu_Opened"
+                         Closed="WidgetContextMenu_Closed">
                 <ContextMenu.Resources>
                     <Style TargetType="MenuItem"
                            BasedOn="{StaticResource WidgetMenuItemStyle}" />

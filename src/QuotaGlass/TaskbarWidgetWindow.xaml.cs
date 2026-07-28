@@ -17,6 +17,11 @@ namespace QuotaGlass;
 public partial class TaskbarWidgetWindow : Window
 {
     private const int GwlExStyle = -20;
+    private const int WhMouseLowLevel = 14;
+    private const int WmLeftButtonDown = 0x0201;
+    private const int WmRightButtonDown = 0x0204;
+    private const int WmMiddleButtonDown = 0x0207;
+    private const int WmXButtonDown = 0x020B;
     private const int WsExToolWindow = 0x00000080;
     private const int WsExNoActivate = 0x08000000;
     private const uint SwpNoSize = 0x0001;
@@ -36,7 +41,9 @@ public partial class TaskbarWidgetWindow : Window
     private readonly MainViewModel _viewModel;
     private readonly DispatcherTimer _positionTimer;
     private readonly HashSet<string> _selectedProviderIds;
+    private readonly LowLevelMouseProc _mouseHookCallback;
     private double? _positionRatio;
+    private nint _mouseHook;
     private NativePoint _dragStartCursor;
     private NativeRect _dragStartWindow;
     private NativeRect _dragTaskbar;
@@ -61,6 +68,7 @@ public partial class TaskbarWidgetWindow : Window
         _viewModel = viewModel;
         _openFullWindow = openFullWindow;
         _exitApplication = exitApplication;
+        _mouseHookCallback = OnLowLevelMouse;
         _selectedProviderIds = TaskbarWidgetProviderStore.Load()
             ?? new HashSet<string>(
                 DefaultProviderIds,
@@ -240,6 +248,7 @@ public partial class TaskbarWidgetWindow : Window
         object sender,
         RoutedEventArgs e)
     {
+        StartOutsideClickMonitor();
         UpdateWindowsStartupMenuItem();
         UpdateThemeMenuItems();
 
@@ -296,6 +305,77 @@ public partial class TaskbarWidgetWindow : Window
             WidgetContextMenu.Items.Insert(insertionIndex++, item);
         }
     }
+
+    private void WidgetContextMenu_Closed(
+        object sender,
+        RoutedEventArgs e) =>
+        StopOutsideClickMonitor();
+
+    private void StartOutsideClickMonitor()
+    {
+        if (_mouseHook != nint.Zero)
+        {
+            return;
+        }
+
+        _mouseHook = SetWindowsHookEx(
+            WhMouseLowLevel,
+            _mouseHookCallback,
+            GetModuleHandle(null),
+            0);
+    }
+
+    private void StopOutsideClickMonitor()
+    {
+        if (_mouseHook == nint.Zero)
+        {
+            return;
+        }
+
+        UnhookWindowsHookEx(_mouseHook);
+        _mouseHook = nint.Zero;
+    }
+
+    private nint OnLowLevelMouse(
+        int code,
+        nint message,
+        nint data)
+    {
+        if (code >= 0 &&
+            IsMouseButtonDown(message) &&
+            WidgetContextMenu.IsOpen)
+        {
+            var mouseData = Marshal.PtrToStructure<LowLevelMouseHookData>(
+                data);
+            if (!IsInsideContextMenu(mouseData.Point))
+            {
+                WidgetContextMenu.IsOpen = false;
+            }
+        }
+
+        return CallNextHookEx(_mouseHook, code, message, data);
+    }
+
+    private bool IsInsideContextMenu(NativePoint point)
+    {
+        if (PresentationSource.FromVisual(WidgetContextMenu)
+                is not HwndSource source ||
+            !GetWindowRect(source.Handle, out var bounds))
+        {
+            return false;
+        }
+
+        return point.X >= bounds.Left &&
+               point.X < bounds.Right &&
+               point.Y >= bounds.Top &&
+               point.Y < bounds.Bottom;
+    }
+
+    private static bool IsMouseButtonDown(nint message) =>
+        message == WmLeftButtonDown ||
+        message == WmRightButtonDown ||
+        message == WmMiddleButtonDown ||
+        message == WmXButtonDown;
 
     private void ResetPlacementMenuItem_Click(
         object sender,
@@ -604,6 +684,7 @@ public partial class TaskbarWidgetWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         _isClosed = true;
+        StopOutsideClickMonitor();
         _positionTimer.Stop();
         _positionTimer.Tick -= OnPositionTimerTick;
         _viewModel.Providers.CollectionChanged -= OnProvidersChanged;
@@ -612,6 +693,32 @@ public partial class TaskbarWidgetWindow : Window
     }
 
     private sealed record ProviderMenuTag(string ProviderId);
+
+    private delegate nint LowLevelMouseProc(
+        int code,
+        nint message,
+        nint data);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern nint SetWindowsHookEx(
+        int hook,
+        LowLevelMouseProc callback,
+        nint module,
+        uint threadId);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool UnhookWindowsHookEx(nint hook);
+
+    [DllImport("user32.dll")]
+    private static extern nint CallNextHookEx(
+        nint hook,
+        int code,
+        nint message,
+        nint data);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+    private static extern nint GetModuleHandle(string? moduleName);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern nint FindWindow(
@@ -701,5 +808,15 @@ public partial class TaskbarWidgetWindow : Window
     {
         public int X;
         public int Y;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct LowLevelMouseHookData
+    {
+        public NativePoint Point;
+        public uint MouseData;
+        public uint Flags;
+        public uint Time;
+        public nuint ExtraInfo;
     }
 }
