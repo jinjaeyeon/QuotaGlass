@@ -55,7 +55,8 @@ public sealed class CodexAppServerUsageProvider(
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
-            CreateNoWindow = true
+            CreateNoWindow = true,
+            WindowStyle = ProcessWindowStyle.Hidden
         };
         startInfo.ArgumentList.Add("app-server");
         startInfo.ArgumentList.Add("--stdio");

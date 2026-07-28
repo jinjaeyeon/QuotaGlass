@@ -54,7 +54,8 @@ public sealed class ClaudeCodeUsageProvider(
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
-            CreateNoWindow = true
+            CreateNoWindow = true,
+            WindowStyle = ProcessWindowStyle.Hidden
         };
         startInfo.ArgumentList.Add("auth");
         startInfo.ArgumentList.Add("status");
@@ -220,7 +221,8 @@ public sealed class ClaudeCodeUsageProvider(
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
-            CreateNoWindow = true
+            CreateNoWindow = true,
+            WindowStyle = ProcessWindowStyle.Hidden
         };
         startInfo.ArgumentList.Add("--headless");
         startInfo.ArgumentList.Add(executablePath);

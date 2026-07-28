@@ -91,7 +91,8 @@ public sealed class AntigravityUsageProvider(
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
-            CreateNoWindow = true
+            CreateNoWindow = true,
+            WindowStyle = ProcessWindowStyle.Hidden
         };
         startInfo.ArgumentList.Add("--headless");
         startInfo.ArgumentList.Add(cliPath);
