@@ -134,6 +134,21 @@ Require(
         claudeMeters.Single(item => item.Label == "주간").RemainingRatio,
         0.588),
     "Claude 주간 잔량");
+Require(
+    ClaudeCodeUsageProvider.IsStatusLineCacheFresh(
+        now.AddMinutes(-9),
+        now),
+    "Claude status-line 최신 캐시 허용");
+Require(
+    !ClaudeCodeUsageProvider.IsStatusLineCacheFresh(
+        now.AddMinutes(-11),
+        now),
+    "Claude status-line 오래된 캐시 거부");
+Require(
+    !ClaudeCodeUsageProvider.IsStatusLineCacheFresh(
+        now.AddMinutes(1),
+        now),
+    "Claude status-line 미래 시각 캐시 거부");
 
 const string claudeUsageScreenFixture =
     """
@@ -170,11 +185,18 @@ var reconciledClaudeMeters =
         claudeMeters,
         now.AddDays(30));
 Require(
-    reconciledClaudeMeters.Any(item =>
-        item.Label == "5시간" &&
-        item.IsReset &&
-        Approximately(item.RemainingRatio, 1)),
-    "Claude 초기화 완료 meter를 100%로 전환");
+    reconciledClaudeMeters.Count == 0,
+    "Claude 만료 meter를 100%로 추정하지 않음");
+
+var partialClaudeMeters =
+    ClaudeCodeUsageProvider.ReconcileExpiredMeters(
+        claudeScreenMeters.Where(item => item.Label == "5시간").ToArray(),
+        claudeMeters,
+        now);
+Require(
+    partialClaudeMeters.Count == 2 &&
+    partialClaudeMeters.Any(item => item.Label == "주간"),
+    "Claude 최신 캐시로 일시적인 부분 파싱 보완");
 
 RunStatusLineInstallerTests();
 

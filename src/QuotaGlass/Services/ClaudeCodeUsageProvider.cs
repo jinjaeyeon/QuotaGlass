@@ -8,6 +8,9 @@ namespace QuotaGlass.Services;
 public sealed class ClaudeCodeUsageProvider(
     AgentInstallation installation) : IUsageProvider
 {
+    private static readonly TimeSpan StatusLineCacheMaxAge =
+        TimeSpan.FromMinutes(10);
+
     public string ProviderId => installation.ProviderId;
     public string DisplayName => installation.DisplayName;
     public string IconText => installation.IconText;
@@ -29,12 +32,18 @@ public sealed class ClaudeCodeUsageProvider(
         var now = DateTimeOffset.Now;
         IReadOnlyList<UsageMeter> cachedMeters = [];
         string? cachedWorkingDirectory = null;
+        var isStatusLineCacheFresh = false;
         if (File.Exists(sidecar))
         {
             var json = await File.ReadAllTextAsync(sidecar, cancellationToken);
             cachedMeters = ClaudeRateLimitParser.Parse(json);
             cachedWorkingDirectory = ReadCachedWorkingDirectory(json);
-            if (cachedMeters.Count > 0 &&
+            var cacheObservedAt = File.GetLastWriteTimeUtc(sidecar);
+            isStatusLineCacheFresh = IsStatusLineCacheFresh(
+                cacheObservedAt,
+                now);
+            if (isStatusLineCacheFresh &&
+                cachedMeters.Count > 0 &&
                 cachedMeters.All(meter => meter.ResetsAt > now))
             {
                 return new UsageSnapshot(
@@ -43,7 +52,7 @@ public sealed class ClaudeCodeUsageProvider(
                     IconText,
                     "구독 · 5시간/주간 · status line",
                     cachedMeters,
-                    File.GetLastWriteTimeUtc(sidecar),
+                    cacheObservedAt,
                     "Claude Code status-line cache");
             }
         }
@@ -104,7 +113,7 @@ public sealed class ClaudeCodeUsageProvider(
                 now);
             meters = ReconcileExpiredMeters(
                 meters,
-                cachedMeters,
+                isStatusLineCacheFresh ? cachedMeters : [],
                 now);
             if (meters.Count > 0)
             {
@@ -159,28 +168,17 @@ public sealed class ClaudeCodeUsageProvider(
             if (cached.ResetsAt > now)
             {
                 result[cached.Id] = cached;
-                continue;
             }
-
-            var duration = cached.ResetsAt - cached.WindowStart;
-            if (duration <= TimeSpan.Zero)
-            {
-                continue;
-            }
-
-            result[cached.Id] = new UsageMeter(
-                cached.Id,
-                cached.Label,
-                100,
-                100,
-                cached.Unit,
-                now,
-                now + duration,
-                true);
         }
 
         return result.Values.ToArray();
     }
+
+    public static bool IsStatusLineCacheFresh(
+        DateTimeOffset cacheObservedAt,
+        DateTimeOffset now) =>
+        cacheObservedAt <= now &&
+        now - cacheObservedAt <= StatusLineCacheMaxAge;
 
     public static string? ReadCachedWorkingDirectory(string json)
     {
