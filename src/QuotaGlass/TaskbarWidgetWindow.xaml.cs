@@ -50,7 +50,7 @@ public partial class TaskbarWidgetWindow : Window
     private nint _lastTaskbar;
     private bool _isPointerDown;
     private bool _isDragging;
-    private bool _isHiddenForFullscreen;
+    private bool _isHiddenAutomatically;
     private bool _isClosed;
 
     public ObservableCollection<ProviderUsageViewModel> WidgetProviders
@@ -148,7 +148,7 @@ public partial class TaskbarWidgetWindow : Window
 
     private void OnPositionTimerTick(object? sender, EventArgs e)
     {
-        if (UpdateFullscreenVisibility())
+        if (UpdateAutomaticVisibility())
         {
             return;
         }
@@ -157,7 +157,7 @@ public partial class TaskbarWidgetWindow : Window
         EnsureAboveTaskbar();
     }
 
-    private bool UpdateFullscreenVisibility()
+    private bool UpdateAutomaticVisibility()
     {
         if (_isClosed || !IsLoaded)
         {
@@ -165,14 +165,17 @@ public partial class TaskbarWidgetWindow : Window
         }
 
         var handle = new WindowInteropHelper(this).Handle;
+        var taskbar = FindWindow("Shell_TrayWnd", null);
         var shouldHide =
-            FullscreenWindowDetector.IsForegroundFullscreenOn(handle);
-        if (shouldHide == _isHiddenForFullscreen)
+            FullscreenWindowDetector.IsForegroundFullscreenOn(handle) ||
+            taskbar != nint.Zero &&
+            !TaskbarVisibilityDetector.IsShown(taskbar);
+        if (shouldHide == _isHiddenAutomatically)
         {
             return shouldHide;
         }
 
-        _isHiddenForFullscreen = shouldHide;
+        _isHiddenAutomatically = shouldHide;
         if (shouldHide)
         {
             WidgetContextMenu.IsOpen = false;

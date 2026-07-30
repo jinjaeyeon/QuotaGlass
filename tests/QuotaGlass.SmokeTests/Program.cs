@@ -77,6 +77,26 @@ Require(
         0, 0, 2560, 1400,
         0, 0, 2560, 1440),
     "작업표시줄을 제외한 최대화 창은 전체 화면에서 제외");
+Require(
+    TaskbarVisibilityDetector.HasVisibleThickness(
+        0, 1400, 2560, 1440,
+        0, 0, 2560, 1440),
+    "자동 숨김 작업표시줄 노출 감지");
+Require(
+    !TaskbarVisibilityDetector.HasVisibleThickness(
+        0, 1438, 2560, 1478,
+        0, 0, 2560, 1440),
+    "자동 숨김 작업표시줄 숨김 감지");
+Require(
+    TaskbarVisibilityDetector.HasVisibleThickness(
+        0, 0, 40, 1440,
+        0, 0, 2560, 1440),
+    "세로 작업표시줄 노출 감지");
+Require(
+    !TaskbarVisibilityDetector.HasVisibleThickness(
+        -38, 0, 2, 1440,
+        0, 0, 2560, 1440),
+    "세로 작업표시줄 숨김 감지");
 
 const string claudeStatusLineFixture =
     """
