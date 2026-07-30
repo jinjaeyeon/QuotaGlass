@@ -356,6 +356,11 @@ void RunStatusLineInstallerTests()
                 StringComparison.Ordinal) == true,
             "status line 미설정 시 bridge 명령 등록");
         Require(
+            ReadCommand(settings)?.Contains(
+                "-WindowStyle Hidden",
+                StringComparison.OrdinalIgnoreCase) == true,
+            "status line bridge 터미널 창 숨김");
+        Require(
             settings["theme"]?.GetValue<string>() == "dark",
             "설치 시 기존 설정 보존");
         Require(

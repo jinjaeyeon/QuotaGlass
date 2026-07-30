@@ -102,7 +102,7 @@ public static class ClaudeStatusLineInstaller
         WriteTextAtomically(bridgeScriptPath, BridgeScript);
 
         var bridgeCommand =
-            $"powershell.exe -NoProfile -NonInteractive " +
+            $"powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden " +
             $"-ExecutionPolicy Bypass -File \"{bridgeScriptPath}\"";
         var bridgeConfigurationPath = Path.Combine(
             stateDirectory,
