@@ -12,5 +12,6 @@
   </PropertyGroup>
   <ItemGroup>
     <Resource Include="Assets\QuotaGlass.ico" />
+    <InternalsVisibleTo Include="QuotaGlass.SmokeTests" />
   </ItemGroup>
 </Project>

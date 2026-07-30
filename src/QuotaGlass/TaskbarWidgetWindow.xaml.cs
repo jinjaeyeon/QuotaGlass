@@ -50,6 +50,7 @@ public partial class TaskbarWidgetWindow : Window
     private nint _lastTaskbar;
     private bool _isPointerDown;
     private bool _isDragging;
+    private bool _isHiddenForFullscreen;
     private bool _isClosed;
 
     public ObservableCollection<ProviderUsageViewModel> WidgetProviders
@@ -147,8 +148,42 @@ public partial class TaskbarWidgetWindow : Window
 
     private void OnPositionTimerTick(object? sender, EventArgs e)
     {
+        if (UpdateFullscreenVisibility())
+        {
+            return;
+        }
+
         PositionOnTaskbar();
         EnsureAboveTaskbar();
+    }
+
+    private bool UpdateFullscreenVisibility()
+    {
+        if (_isClosed || !IsLoaded)
+        {
+            return false;
+        }
+
+        var handle = new WindowInteropHelper(this).Handle;
+        var shouldHide =
+            FullscreenWindowDetector.IsForegroundFullscreenOn(handle);
+        if (shouldHide == _isHiddenForFullscreen)
+        {
+            return shouldHide;
+        }
+
+        _isHiddenForFullscreen = shouldHide;
+        if (shouldHide)
+        {
+            WidgetContextMenu.IsOpen = false;
+            Hide();
+            return true;
+        }
+
+        Show();
+        PositionOnTaskbar();
+        PromoteToTopmost();
+        return false;
     }
 
     private void EnsureAboveTaskbar()

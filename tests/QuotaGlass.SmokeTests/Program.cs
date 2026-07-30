@@ -57,6 +57,26 @@ Require(
     installations.Select(item => item.ProviderId).Distinct().Count() ==
     installations.Count,
     "설치 감지 결과 중복 없음");
+Require(
+    FullscreenWindowDetector.CoversMonitor(
+        0, 0, 2560, 1440,
+        0, 0, 2560, 1440),
+    "전체 화면 창 감지");
+Require(
+    FullscreenWindowDetector.CoversMonitor(
+        -1, -1, 2561, 1441,
+        0, 0, 2560, 1440),
+    "모니터보다 큰 전체 화면 창 감지");
+Require(
+    FullscreenWindowDetector.CoversMonitor(
+        1, 1, 2559, 1439,
+        0, 0, 2560, 1440),
+    "전체 화면 경계 오차 허용");
+Require(
+    !FullscreenWindowDetector.CoversMonitor(
+        0, 0, 2560, 1400,
+        0, 0, 2560, 1440),
+    "작업표시줄을 제외한 최대화 창은 전체 화면에서 제외");
 
 const string claudeStatusLineFixture =
     """
