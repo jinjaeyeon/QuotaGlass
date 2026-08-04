@@ -21,6 +21,13 @@ public partial class App : System.Windows.Application
     public bool EnforceSingleInstance { get; set; } = true;
     public bool ForceProcessExitOnShutdown { get; set; } = true;
 
+    [System.Runtime.CompilerServices.ModuleInitializer]
+    internal static void InitializeDpiAwareness()
+    {
+        System.Windows.Forms.Application.SetHighDpiMode(
+            System.Windows.Forms.HighDpiMode.PerMonitorV2);
+    }
+
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
