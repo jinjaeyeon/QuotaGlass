@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using QuotaGlass.Models;
 using QuotaGlass.Services;
@@ -31,10 +32,10 @@ await foreach (var result in refreshService.RefreshAsCompletedAsync(
     streamedResults.Add(result);
 }
 
-Require(snapshots.Count == 5, "기본 provider 개수");
-Require(streamedResults.Count == 5, "provider 완료 순서 갱신 개수");
+Require(snapshots.Count == 6, "기본 provider 개수");
+Require(streamedResults.Count == 6, "provider 완료 순서 갱신 개수");
 Require(
-    streamedResults.Select(result => result.ProviderIndex).Distinct().Count() == 5,
+    streamedResults.Select(result => result.ProviderIndex).Distinct().Count() == 6,
     "provider 완료 순서 갱신 인덱스");
 Require(snapshots.All(snapshot => snapshot.Meters.Count > 0), "provider별 meter 생성");
 var providerViewModels = snapshots
@@ -51,6 +52,72 @@ Require(codex.AccountLabel.Contains("팀", StringComparison.Ordinal), "Codex 팀
 Require(
     codex.Meters is [{ Id: "monthly" }],
     "팀 Codex 월간 meter");
+
+const string copilotQuotaFixture =
+    """
+    {
+      "quotaSnapshots": {
+        "chat": {
+          "isUnlimitedEntitlement": false,
+          "entitlementRequests": 200,
+          "usedRequests": 35,
+          "remainingPercentage": 82.5,
+          "resetDate": "2026-08-01T00:00:00Z"
+        },
+        "completions": {
+          "isUnlimitedEntitlement": false,
+          "entitlementRequests": 2000,
+          "usedRequests": 500,
+          "remainingPercentage": 75,
+          "resetDate": "2026-08-01T00:00:00Z"
+        },
+        "premium_interactions": {
+          "isUnlimitedEntitlement": false,
+          "entitlementRequests": 0,
+          "usedRequests": 0,
+          "remainingPercentage": 0
+        }
+      }
+    }
+    """;
+using (var copilotDocument = JsonDocument.Parse(copilotQuotaFixture))
+{
+    var copilotMeters = GitHubCopilotQuotaParser.Parse(
+        copilotDocument.RootElement,
+        now);
+    Require(copilotMeters.Count == 2, "GitHub Copilot quota meter 개수");
+    Require(
+        Approximately(
+            copilotMeters.Single(item => item.Id == "chat").RemainingRatio,
+            0.825),
+        "GitHub Copilot Chat 잔량");
+}
+
+const string cursorUsageFixture =
+    """
+    {
+      "billingCycleStart": "1783786404220",
+      "billingCycleEnd": "1786464804220",
+      "planUsage": {
+        "autoPercentUsed": 8,
+        "apiPercentUsed": 17,
+        "totalPercentUsed": 25
+      }
+    }
+    """;
+using (var cursorDocument = JsonDocument.Parse(cursorUsageFixture))
+{
+    var cursorMeters = CursorUsageParser.Parse(
+        cursorDocument.RootElement,
+        now);
+    Require(cursorMeters.Count == 1, "Cursor 월간 meter 개수");
+    Require(
+        Approximately(cursorMeters[0].RemainingRatio, 0.75),
+        "Cursor 월간 포함량 잔량");
+    Require(
+        cursorMeters[0].ResetsAt > cursorMeters[0].WindowStart,
+        "Cursor 결제 주기 시각");
+}
 
 var installations = new AgentInstallationDetector().Detect();
 Require(
@@ -293,6 +360,20 @@ if (args.Contains("--integration", StringComparer.Ordinal))
         actualAntigravity.State == UsageSnapshotState.Available &&
         actualAntigravity.Meters.Count >= 2,
         "Antigravity 모델 그룹별 실제 quota");
+
+    var actualCopilot = actualSnapshots.Single(snapshot =>
+        snapshot.Provider == "github-copilot");
+    Require(
+        actualCopilot.State == UsageSnapshotState.Available &&
+        actualCopilot.Meters.Count > 0,
+        "GitHub Copilot CLI 실제 quota");
+
+    var actualCursor = actualSnapshots.Single(snapshot =>
+        snapshot.Provider == "cursor");
+    Require(
+        actualCursor.State == UsageSnapshotState.Available &&
+        actualCursor.Meters.Count > 0,
+        "Cursor CLI 실제 사용량");
 }
 
 var exitCompleted = false;

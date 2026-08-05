@@ -65,6 +65,15 @@ public sealed class MockUsageProvider(
                 new("monthly", "월간", 43, 100, "percent", TimeSpan.FromDays(30), 0.62)
             ]),
         new MockUsageProvider(
+            "github-copilot",
+            "GitHub Copilot",
+            "GH",
+            "개인 · 월간",
+            [
+                new("chat", "Chat", 156, 200, "requests", TimeSpan.FromDays(31), 0.58),
+                new("completions", "코드 완성", 1740, 2000, "requests", TimeSpan.FromDays(31), 0.58)
+            ]),
+        new MockUsageProvider(
             "antigravity",
             "Antigravity",
             "✦",

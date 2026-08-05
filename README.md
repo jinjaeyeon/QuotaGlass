@@ -11,7 +11,12 @@ AI Credits와 다음 refill 시각을 읽습니다. Claude Code는 `auth status`
 `rate_limits.seven_day`도 지원합니다. 기존 status line은 브리지 뒤에 그대로
 연결됩니다. Antigravity는 공식 `agy` CLI가 자체 인증으로 제공하는 로컬
 `RetrieveUserQuotaSummary` RPC를 통해 Gemini 및 Claude/GPT 모델 그룹의
-5시간·주간 quota를 읽습니다.
+5시간·주간 quota를 읽습니다. GitHub Copilot은 설치된 공식 Copilot CLI를
+headless JSON-RPC 서버로 실행하고, 기존 로그인을 재사용하는
+`account.getQuota`를 통해 Chat, 코드 완성 또는 AI Credits의 월간 잔량을
+읽습니다. Cursor는 Cursor Agent CLI의 로컬 로그인 상태를 재사용해 CLI의
+`/usage` 화면과 같은 `GetCurrentPeriodUsage`를 호출하고, 현재 결제 주기의
+포함 사용량 잔량을 읽습니다.
 
 제한 구간은 서비스에 고정하지 않습니다. Codex 어댑터는 현재 계정이 반환한
 primary/secondary window를 meter로 변환합니다. 따라서 개인 계정의

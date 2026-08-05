@@ -24,6 +24,13 @@ public sealed class AgentInstallationDetector
             "<>",
             "codex");
 
+        AddCommandLineAgent(
+            installations,
+            "github-copilot",
+            "GitHub Copilot",
+            "GH",
+            "copilot");
+
         AddDesktopAgent(
             installations,
             "antigravity",
@@ -35,23 +42,7 @@ public sealed class AgentInstallationDetector
                 "antigravity",
                 "Antigravity.exe"));
 
-        AddDesktopAgent(
-            installations,
-            "cursor",
-            "Cursor",
-            "↖",
-            FindFirstExisting(
-                FindOnPath("cursor"),
-                Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "Programs",
-                    "cursor",
-                    "Cursor.exe"),
-                Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "Programs",
-                    "Cursor",
-                    "Cursor.exe")));
+        AddCursor(installations);
 
         if (IsJetBrainsAiInstalled())
         {
@@ -112,6 +103,38 @@ public sealed class AgentInstallationDetector
                 "설치됨",
                 path,
                 ReadVersion(path!)));
+    }
+
+    private static void AddCursor(
+        ICollection<AgentInstallation> installations)
+    {
+        var localAppData = Environment.GetFolderPath(
+            Environment.SpecialFolder.LocalApplicationData);
+        var executablePath = FindFirstExisting(
+            FindOnPath("cursor-agent"),
+            FindOnPath("cursor"),
+            Path.Combine(localAppData, "cursor-agent", "cursor-agent.cmd"),
+            Path.Combine(localAppData, "Programs", "cursor", "Cursor.exe"),
+            Path.Combine(localAppData, "Programs", "Cursor", "Cursor.exe"));
+        var authPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "Cursor",
+            "auth.json");
+
+        if (executablePath is null && !File.Exists(authPath))
+        {
+            return;
+        }
+
+        installations.Add(
+            new AgentInstallation(
+                "cursor",
+                "Cursor",
+                "↖",
+                "설치됨",
+                executablePath,
+                executablePath is null ? null : ReadVersion(executablePath),
+                File.Exists(authPath) ? authPath : null));
     }
 
     private static string? FindOnPath(string command)

@@ -23,6 +23,10 @@ public static class UsageProviderFactory
                 new JetBrainsAiUsageProvider(installation),
             "claude-code" =>
                 new ClaudeCodeUsageProvider(installation),
+            "github-copilot" when installation.ExecutablePath is not null =>
+                new GitHubCopilotUsageProvider(installation),
+            "cursor" when installation.UsageStatePath is not null =>
+                new CursorUsageProvider(installation),
             "antigravity" =>
                 new AntigravityUsageProvider(installation),
             _ => new PendingUsageProvider(installation)
