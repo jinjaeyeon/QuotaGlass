@@ -74,6 +74,32 @@ public partial class MainWindow : Window
     private void HideButton_Click(object sender, RoutedEventArgs e) =>
         _dismissWindow();
 
+    private void CollapseProviderButton_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement
+            {
+                DataContext: ProviderUsageViewModel provider
+            } && DataContext is MainViewModel viewModel)
+        {
+            viewModel.CollapseProvider(provider.Provider);
+        }
+    }
+
+    private void ExpandProviderButton_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement
+            {
+                DataContext: ProviderUsageViewModel provider
+            } && DataContext is MainViewModel viewModel)
+        {
+            viewModel.ExpandProvider(provider.Provider);
+        }
+    }
+
     internal void ShowFullWindow()
     {
         if (!Dispatcher.CheckAccess())

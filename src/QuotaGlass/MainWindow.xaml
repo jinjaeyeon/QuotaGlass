@@ -112,7 +112,8 @@
                     <Style TargetType="ScrollBar"
                            BasedOn="{StaticResource GlassVerticalScrollBarStyle}" />
                 </ScrollViewer.Resources>
-                <ItemsControl ItemsSource="{Binding Providers}">
+                <StackPanel>
+                    <ItemsControl ItemsSource="{Binding VisibleProviders}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <Border Margin="0,0,0,9"
@@ -207,7 +208,16 @@
                                                FontSize="11"
                                                Text="{Binding PrimaryMeter.ResetText}" />
 
-                                    <TextBlock Grid.RowSpan="2"
+                                    <Button Grid.Column="2"
+                                            Padding="8,3"
+                                            Margin="18,0,0,0"
+                                            VerticalAlignment="Top"
+                                            FontSize="10"
+                                            ToolTip="메인 창에서 이 에이전트 접기"
+                                            Click="CollapseProviderButton_Click"
+                                            Content="접기" />
+
+                                    <TextBlock Grid.Row="1"
                                                Grid.Column="2"
                                                Margin="18,0,0,0"
                                                VerticalAlignment="Center"
@@ -359,7 +369,53 @@
                             </Border>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                    </ItemsControl>
+
+                    <Border Margin="0,1,0,9"
+                            Padding="12,10"
+                            Background="{DynamicResource SurfaceBrush}"
+                            CornerRadius="12">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="Visibility" Value="Visible" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding CollapsedProviders.Count}"
+                                             Value="0">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                    <StackPanel>
+                        <TextBlock Margin="2,0,0,7"
+                                   Foreground="{DynamicResource MutedTextBrush}"
+                                   FontSize="11"
+                                   Text="접은 에이전트 · 클릭해서 다시 열기" />
+                        <ItemsControl ItemsSource="{Binding CollapsedProviders}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Margin="0,0,7,4"
+                                            Padding="9,5"
+                                            FontSize="11"
+                                            ToolTip="다시 펼치기"
+                                            Click="ExpandProviderButton_Click">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="＋" />
+                                            <TextBlock Margin="4,0,0,0"
+                                                       Text="{Binding DisplayName}" />
+                                        </StackPanel>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                    </Border>
+                </StackPanel>
             </ScrollViewer>
 
             <TextBlock Grid.Row="3"

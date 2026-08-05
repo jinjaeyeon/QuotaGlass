@@ -266,6 +266,7 @@ Require(
     "Claude 최신 캐시로 일시적인 부분 파싱 보완");
 
 RunStatusLineInstallerTests();
+RunCollapsedProviderStoreTests();
 
 const string antigravityQuotaFixture =
     """
@@ -610,6 +611,33 @@ void RunStatusLineInstallerTests()
         var output = process.StandardOutput.ReadToEnd();
         process.WaitForExit();
         return output;
+    }
+}
+
+void RunCollapsedProviderStoreTests()
+{
+    var root = Path.Combine(
+        Path.GetTempPath(),
+        $"QuotaGlass.CollapsedProviders.{Guid.NewGuid():N}");
+    var settingsPath = Path.Combine(root, "collapsed-providers.json");
+
+    try
+    {
+        CollapsedProviderStore.Save(
+            settingsPath,
+            ["cursor", "codex", "cursor", ""]);
+        var restoredProviderIds = CollapsedProviderStore.Load(settingsPath);
+
+        Require(
+            restoredProviderIds.SetEquals(["codex", "cursor"]),
+            "접은 에이전트 상태 저장 및 복원");
+    }
+    finally
+    {
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
     }
 }
 

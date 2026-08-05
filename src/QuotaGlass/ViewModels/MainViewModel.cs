@@ -10,6 +10,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private readonly DispatcherTimer _refreshTimer;
     private readonly Dictionary<string, int> _providerOrder = new(
         StringComparer.Ordinal);
+    private readonly HashSet<string> _collapsedProviderIds;
     private CancellationTokenSource? _refreshCancellation;
     private bool _isRefreshing;
     private string _updateSummary = "불러오는 중…";
@@ -17,6 +18,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public MainViewModel()
     {
+        _collapsedProviderIds = CollapsedProviderStore.Load();
         _refreshService = new UsageRefreshService(
             UsageProviderFactory.CreateInstalledProviders());
 
@@ -33,6 +35,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     public ObservableCollection<ProviderUsageViewModel> Providers { get; } = [];
+    public ObservableCollection<ProviderUsageViewModel> VisibleProviders { get; } = [];
+    public ObservableCollection<ProviderUsageViewModel> CollapsedProviders { get; } = [];
 
     public AsyncRelayCommand RefreshCommand { get; }
     public event EventHandler? ProvidersUpdated;
@@ -61,6 +65,24 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         get => _showDetails;
         set => SetProperty(ref _showDetails, value);
+    }
+
+    public void CollapseProvider(string providerId)
+    {
+        if (_collapsedProviderIds.Add(providerId))
+        {
+            CollapsedProviderStore.Save(_collapsedProviderIds);
+            UpdateProviderVisibility();
+        }
+    }
+
+    public void ExpandProvider(string providerId)
+    {
+        if (_collapsedProviderIds.Remove(providerId))
+        {
+            CollapsedProviderStore.Save(_collapsedProviderIds);
+            UpdateProviderVisibility();
+        }
     }
 
     public async Task RefreshAsync()
@@ -132,6 +154,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             if (Providers[index].Provider == snapshot.Provider)
             {
                 Providers[index] = updatedProvider;
+                UpdateProviderVisibility();
                 return;
             }
         }
@@ -147,6 +170,30 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
 
         Providers.Insert(insertionIndex, updatedProvider);
+        UpdateProviderVisibility();
+    }
+
+    private void UpdateProviderVisibility()
+    {
+        ReplaceContents(
+            VisibleProviders,
+            Providers.Where(provider =>
+                !_collapsedProviderIds.Contains(provider.Provider)));
+        ReplaceContents(
+            CollapsedProviders,
+            Providers.Where(provider =>
+                _collapsedProviderIds.Contains(provider.Provider)));
+    }
+
+    private static void ReplaceContents(
+        ObservableCollection<ProviderUsageViewModel> destination,
+        IEnumerable<ProviderUsageViewModel> source)
+    {
+        destination.Clear();
+        foreach (var provider in source)
+        {
+            destination.Add(provider);
+        }
     }
 
     private void ScheduleNextRefresh(DateTimeOffset now)
