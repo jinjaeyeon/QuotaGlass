@@ -19,10 +19,27 @@ public sealed class UsageRefreshService(IReadOnlyList<IUsageProvider> providers)
     public async IAsyncEnumerable<UsageRefreshResult> RefreshAsCompletedAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
+        await foreach (var result in RefreshAsCompletedAsync(
+                           _ => true,
+                           cancellationToken))
+        {
+            yield return result;
+        }
+    }
+
+    public int CountProviders(Func<string, bool> shouldRefresh) =>
+        providers.Count(provider => shouldRefresh(provider.ProviderId));
+
+    public async IAsyncEnumerable<UsageRefreshResult> RefreshAsCompletedAsync(
+        Func<string, bool> shouldRefresh,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
         var pending = providers
-            .Select((provider, index) => FetchIndexedSafelyAsync(
-                provider,
-                index,
+            .Select((provider, index) => (provider, index))
+            .Where(item => shouldRefresh(item.provider.ProviderId))
+            .Select(item => FetchIndexedSafelyAsync(
+                item.provider,
+                item.index,
                 cancellationToken))
             .ToList();
 

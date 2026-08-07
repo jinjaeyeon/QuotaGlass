@@ -38,9 +38,38 @@ await foreach (var result in refreshService.RefreshAsCompletedAsync(
 
 Require(snapshots.Count == 6, "기본 provider 개수");
 Require(streamedResults.Count == 6, "provider 완료 순서 갱신 개수");
+var filteredResults = new List<UsageRefreshResult>();
+await foreach (var result in refreshService.RefreshAsCompletedAsync(
+                   providerId => providerId != "claude-code",
+                   CancellationToken.None))
+{
+    filteredResults.Add(result);
+}
+Require(
+    filteredResults.Count == 5 &&
+    filteredResults.All(result => result.Snapshot.Provider != "claude-code"),
+    "숨긴 provider 갱신 제외");
 Require(
     streamedResults.Select(result => result.ProviderIndex).Distinct().Count() == 6,
     "provider 완료 순서 갱신 인덱스");
+Require(
+    !MainViewModel.ShouldRefreshProvider(
+        "claude-code",
+        new HashSet<string>(["claude-code"]),
+        new HashSet<string>()),
+    "메인 창과 위젯에서 모두 숨긴 provider 갱신 생략");
+Require(
+    MainViewModel.ShouldRefreshProvider(
+        "claude-code",
+        new HashSet<string>(["claude-code"]),
+        new HashSet<string>(["claude-code"])),
+    "메인 창에서 접어도 위젯 표시 provider 갱신");
+Require(
+    MainViewModel.ShouldRefreshProvider(
+        "claude-code",
+        new HashSet<string>(),
+        new HashSet<string>()),
+    "위젯에서 숨겨도 메인 창 표시 provider 갱신");
 Require(snapshots.All(snapshot => snapshot.Meters.Count > 0), "provider별 meter 생성");
 var providerViewModels = snapshots
     .Select(snapshot => new ProviderUsageViewModel(snapshot, now))
@@ -280,6 +309,16 @@ var claudeScreenMeters = ClaudeUsageScreenParser.Parse(
     claudeUsageScreenFixture,
     now);
 Require(claudeScreenMeters.Count == 2, "Claude /usage 화면 meter 개수");
+Require(
+    ClaudeCodeUsageProvider.HasCompleteUsageScreen(
+        claudeUsageScreenFixture,
+        now),
+    "Claude /usage 화면 완료 즉시 감지");
+Require(
+    !ClaudeCodeUsageProvider.HasCompleteUsageScreen(
+        "Current session\n81% used\nResets 2:59pm (Asia/Seoul)",
+        now),
+    "Claude /usage 부분 화면을 완료로 오인하지 않음");
 Require(
     Approximately(
         claudeScreenMeters.Single(item => item.Label == "5시간")

@@ -30,12 +30,6 @@ public partial class TaskbarWidgetWindow : Window
     private const uint SwpNoOwnerZOrder = 0x0200;
     private const uint GwHwndNext = 2;
     private static readonly nint HwndTopmost = new(-1);
-    private static readonly string[] DefaultProviderIds =
-    [
-        "claude-code",
-        "codex"
-    ];
-
     private readonly Action _openFullWindow;
     private readonly Action _exitApplication;
     private readonly MainViewModel _viewModel;
@@ -70,10 +64,7 @@ public partial class TaskbarWidgetWindow : Window
         _openFullWindow = openFullWindow;
         _exitApplication = exitApplication;
         _mouseHookCallback = OnLowLevelMouse;
-        _selectedProviderIds = TaskbarWidgetProviderStore.Load()
-            ?? new HashSet<string>(
-                DefaultProviderIds,
-                StringComparer.Ordinal);
+        _selectedProviderIds = TaskbarWidgetProviderStore.LoadOrDefault();
         _positionRatio = TaskbarWidgetPlacementStore.Load();
         _positionTimer = new DispatcherTimer
         {
@@ -338,6 +329,9 @@ public partial class TaskbarWidgetWindow : Window
 
                 icon.Text = item.IsChecked ? "✓" : string.Empty;
                 TaskbarWidgetProviderStore.Save(_selectedProviderIds);
+                _viewModel.SetTaskbarWidgetProviderVisibility(
+                    provider.Provider,
+                    item.IsChecked);
                 UpdateWidgetProviders();
             };
             WidgetContextMenu.Items.Insert(insertionIndex++, item);

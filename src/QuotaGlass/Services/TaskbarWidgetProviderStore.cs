@@ -5,6 +5,12 @@ namespace QuotaGlass.Services;
 
 internal static class TaskbarWidgetProviderStore
 {
+    private static readonly string[] DefaultProviderIds =
+    [
+        "claude-code",
+        "codex"
+    ];
+
     private static readonly string SettingsPath = Path.Combine(
         Environment.GetFolderPath(
             Environment.SpecialFolder.LocalApplicationData),
@@ -33,6 +39,9 @@ internal static class TaskbarWidgetProviderStore
             return null;
         }
     }
+
+    public static HashSet<string> LoadOrDefault() =>
+        Load() ?? new HashSet<string>(DefaultProviderIds, StringComparer.Ordinal);
 
     public static void Save(IEnumerable<string> providerIds)
     {

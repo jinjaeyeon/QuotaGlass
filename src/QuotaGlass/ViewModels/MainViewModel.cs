@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Windows.Threading;
+using QuotaGlass.Models;
 using QuotaGlass.Services;
 
 namespace QuotaGlass.ViewModels;
@@ -12,6 +13,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private readonly Dictionary<string, int> _providerOrder = new(
         StringComparer.Ordinal);
     private readonly HashSet<string> _collapsedProviderIds;
+    private readonly HashSet<string> _taskbarWidgetProviderIds;
     private CancellationTokenSource? _refreshCancellation;
     private bool _isRefreshing;
     private string _updateSummary = "불러오는 중…";
@@ -20,6 +22,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public MainViewModel()
     {
         _collapsedProviderIds = CollapsedProviderStore.Load();
+        _taskbarWidgetProviderIds = TaskbarWidgetProviderStore.LoadOrDefault();
         _refreshService = new UsageRefreshService([]);
         ReloadProviders();
 
@@ -82,8 +85,36 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         if (_collapsedProviderIds.Remove(providerId))
         {
+            var wasExcluded = !_taskbarWidgetProviderIds.Contains(providerId);
             CollapsedProviderStore.Save(_collapsedProviderIds);
             UpdateProviderVisibility();
+            if (wasExcluded)
+            {
+                _ = RefreshAsync();
+            }
+        }
+    }
+
+    public void SetTaskbarWidgetProviderVisibility(
+        string providerId,
+        bool isVisible)
+    {
+        var wasExcluded = !ShouldRefreshProvider(
+            providerId,
+            _collapsedProviderIds,
+            _taskbarWidgetProviderIds);
+        if (isVisible)
+        {
+            _taskbarWidgetProviderIds.Add(providerId);
+        }
+        else
+        {
+            _taskbarWidgetProviderIds.Remove(providerId);
+        }
+
+        if (wasExcluded && isVisible)
+        {
+            _ = RefreshAsync();
         }
     }
 
@@ -99,7 +130,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         try
         {
             var refreshedProviderCount = 0;
+            var refreshableProviderCount = _refreshService.CountProviders(
+                ShouldRefreshProvider);
             await foreach (var result in _refreshService.RefreshAsCompletedAsync(
+                               ShouldRefreshProvider,
                                _refreshCancellation.Token))
             {
                 _providerOrder[result.Snapshot.Provider] = result.ProviderIndex;
@@ -111,7 +145,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 refreshedProviderCount++;
                 ProvidersUpdated?.Invoke(this, EventArgs.Empty);
                 UpdateSummary =
-                    $"사용량 갱신 중… {refreshedProviderCount}/{_refreshService.ProviderCount}";
+                    $"사용량 갱신 중… {refreshedProviderCount}/{refreshableProviderCount}";
             }
 
             ScheduleNextRefresh(DateTimeOffset.Now);
@@ -141,6 +175,27 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         Providers.Clear();
         VisibleProviders.Clear();
         CollapsedProviders.Clear();
+        var now = DateTimeOffset.Now;
+        for (var index = 0; index < installations.Count; index++)
+        {
+            var installation = installations[index];
+            _providerOrder[installation.ProviderId] = index;
+            Providers.Add(new ProviderUsageViewModel(
+                new UsageSnapshot(
+                    installation.ProviderId,
+                    installation.DisplayName,
+                    installation.IconText,
+                    installation.AccountLabel,
+                    [],
+                    now,
+                    "갱신 대기",
+                    UsageSnapshotState.AdapterPending,
+                    ShouldRefreshProvider(installation.ProviderId)
+                        ? "사용량 확인 중…"
+                        : "메인 창과 위젯에서 숨겨져 갱신하지 않음"),
+                now));
+        }
+        UpdateProviderVisibility();
         ReloadManagedCliOptions(installations);
     }
 
@@ -247,6 +302,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private void ScheduleNextRefresh(DateTimeOffset now)
     {
         var nearestReset = Providers
+            .Where(provider => ShouldRefreshProvider(provider.Provider))
             .SelectMany(provider => provider.Meters)
             .Where(meter => !meter.IsReset && meter.ResetsAt > now)
             .Select(meter => (DateTimeOffset?)meter.ResetsAt)
@@ -266,4 +322,17 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             ? TimeSpan.FromSeconds(10)
             : interval;
     }
+
+    private bool ShouldRefreshProvider(string providerId) =>
+        ShouldRefreshProvider(
+            providerId,
+            _collapsedProviderIds,
+            _taskbarWidgetProviderIds);
+
+    internal static bool ShouldRefreshProvider(
+        string providerId,
+        IReadOnlySet<string> collapsedProviderIds,
+        IReadOnlySet<string> taskbarWidgetProviderIds) =>
+        !collapsedProviderIds.Contains(providerId) ||
+        taskbarWidgetProviderIds.Contains(providerId);
 }

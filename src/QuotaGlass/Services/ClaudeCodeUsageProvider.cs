@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.Text;
 using System.Text.Json;
 using QuotaGlass.Models;
 
@@ -8,6 +9,12 @@ namespace QuotaGlass.Services;
 public sealed class ClaudeCodeUsageProvider(
     AgentInstallation installation) : IUsageProvider
 {
+    private static readonly TimeSpan UsageStartupTimeout =
+        TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan UsageMinimumWarmup =
+        TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan UsageScreenTimeout =
+        TimeSpan.FromSeconds(6);
     private static readonly TimeSpan StatusLineCacheMaxAge =
         TimeSpan.FromMinutes(10);
 
@@ -57,6 +64,14 @@ public sealed class ClaudeCodeUsageProvider(
             }
         }
 
+        using var usageCancellation =
+            CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var usageTask = ReadUsageScreenAsync(
+            installation.ExecutablePath,
+            cachedWorkingDirectory,
+            now,
+            usageCancellation.Token);
+
         var startInfo = new ProcessStartInfo
         {
             FileName = installation.ExecutablePath,
@@ -105,10 +120,7 @@ public sealed class ClaudeCodeUsageProvider(
 
         if (isSubscription)
         {
-            var usageOutput = await ReadUsageScreenAsync(
-                installation.ExecutablePath,
-                cachedWorkingDirectory,
-                cancellationToken);
+            var usageOutput = await usageTask;
             var meters = ClaudeUsageScreenParser.Parse(
                 usageOutput,
                 now);
@@ -126,6 +138,18 @@ public sealed class ClaudeCodeUsageProvider(
                     meters,
                     DateTimeOffset.Now,
                     "Claude Code /usage");
+            }
+        }
+        else
+        {
+            usageCancellation.Cancel();
+            try
+            {
+                _ = await usageTask;
+            }
+            catch (OperationCanceledException)
+            {
+                // The speculative /usage session is no longer needed.
             }
         }
 
@@ -209,6 +233,7 @@ public sealed class ClaudeCodeUsageProvider(
     private static async Task<string> ReadUsageScreenAsync(
         string executablePath,
         string? cachedWorkingDirectory,
+        DateTimeOffset observedAt,
         CancellationToken cancellationToken)
     {
         var startInfo = new ProcessStartInfo
@@ -232,18 +257,35 @@ public sealed class ClaudeCodeUsageProvider(
         using var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException(
                 "Claude Code /usage 세션을 시작하지 못했습니다.");
-        var outputTask = process.StandardOutput.ReadToEndAsync(
+        var output = new StringBuilder();
+        var outputStarted = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var usageReady = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var outputTask = ReadUsageOutputAsync(
+            process.StandardOutput,
+            output,
+            outputStarted,
+            usageReady,
+            observedAt,
             cancellationToken);
         var errorTask = process.StandardError.ReadToEndAsync(
             cancellationToken);
 
         try
         {
-            await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
+            await Task.WhenAll(
+                Task.Delay(UsageMinimumWarmup, cancellationToken),
+                Task.WhenAny(
+                    outputStarted.Task,
+                    Task.Delay(UsageStartupTimeout, cancellationToken)));
             await process.StandardInput.WriteAsync("/usage");
             await process.StandardInput.WriteAsync("\r");
             await process.StandardInput.FlushAsync(cancellationToken);
-            await Task.Delay(TimeSpan.FromSeconds(6), cancellationToken);
+
+            _ = await Task.WhenAny(
+                usageReady.Task,
+                Task.Delay(UsageScreenTimeout, cancellationToken));
 
             await process.StandardInput.WriteAsync("\u001b");
             await process.StandardInput.FlushAsync(cancellationToken);
@@ -258,8 +300,41 @@ public sealed class ClaudeCodeUsageProvider(
             await process.WaitForExitAsync(CancellationToken.None);
         }
 
-        var output = await outputTask;
+        await outputTask;
         _ = await errorTask;
-        return output;
+        return output.ToString();
     }
+
+    private static async Task ReadUsageOutputAsync(
+        StreamReader reader,
+        StringBuilder output,
+        TaskCompletionSource outputStarted,
+        TaskCompletionSource usageReady,
+        DateTimeOffset observedAt,
+        CancellationToken cancellationToken)
+    {
+        var buffer = new char[4096];
+        while (true)
+        {
+            var count = await reader.ReadAsync(
+                buffer.AsMemory(),
+                cancellationToken);
+            if (count == 0)
+            {
+                return;
+            }
+
+            output.Append(buffer, 0, count);
+            outputStarted.TrySetResult();
+            if (HasCompleteUsageScreen(output.ToString(), observedAt))
+            {
+                usageReady.TrySetResult();
+            }
+        }
+    }
+
+    internal static bool HasCompleteUsageScreen(
+        string terminalOutput,
+        DateTimeOffset observedAt) =>
+        ClaudeUsageScreenParser.Parse(terminalOutput, observedAt).Count >= 2;
 }
