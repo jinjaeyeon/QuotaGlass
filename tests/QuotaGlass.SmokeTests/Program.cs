@@ -320,6 +320,28 @@ Require(
         now),
     "Claude /usage 부분 화면을 완료로 오인하지 않음");
 Require(
+    !ClaudeCodeUsageProvider.HasFinishedUsageRefresh(
+        claudeUsageScreenFixture,
+        now),
+    "Claude /usage 최초 캐시 화면을 갱신 완료로 오인하지 않음");
+Require(
+    !ClaudeCodeUsageProvider.HasFinishedUsageRefresh(
+        $"{claudeUsageScreenFixture}\nRefreshing…",
+        now),
+    "Claude /usage 갱신 중 화면 대기");
+Require(
+    ClaudeCodeUsageProvider.HasFinishedUsageRefresh(
+        $"{claudeUsageScreenFixture}\nRefreshing…\n" +
+        "Showing last-known usage (could not refresh)",
+        now),
+    "Claude /usage 갱신 실패 후 마지막 값 사용");
+Require(
+    ClaudeCodeUsageProvider.HasFinishedUsageRefresh(
+        $"{claudeUsageScreenFixture}\nRefreshing…\n" +
+        claudeUsageScreenFixture.Replace("81%", "83%"),
+        now),
+    "Claude /usage 갱신 후 다시 그린 최신 화면 감지");
+Require(
     Approximately(
         claudeScreenMeters.Single(item => item.Label == "5시간")
             .RemainingRatio,

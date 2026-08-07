@@ -12,7 +12,7 @@ public sealed class ClaudeCodeUsageProvider(
     private static readonly TimeSpan UsageStartupTimeout =
         TimeSpan.FromSeconds(2);
     private static readonly TimeSpan UsageMinimumWarmup =
-        TimeSpan.FromSeconds(1);
+        TimeSpan.FromSeconds(2);
     private static readonly TimeSpan UsageScreenTimeout =
         TimeSpan.FromSeconds(6);
     private static readonly TimeSpan StatusLineCacheMaxAge =
@@ -326,7 +326,7 @@ public sealed class ClaudeCodeUsageProvider(
 
             output.Append(buffer, 0, count);
             outputStarted.TrySetResult();
-            if (HasCompleteUsageScreen(output.ToString(), observedAt))
+            if (HasFinishedUsageRefresh(output.ToString(), observedAt))
             {
                 usageReady.TrySetResult();
             }
@@ -337,4 +337,32 @@ public sealed class ClaudeCodeUsageProvider(
         string terminalOutput,
         DateTimeOffset observedAt) =>
         ClaudeUsageScreenParser.Parse(terminalOutput, observedAt).Count >= 2;
+
+    internal static bool HasFinishedUsageRefresh(
+        string terminalOutput,
+        DateTimeOffset observedAt)
+    {
+        if (!HasCompleteUsageScreen(terminalOutput, observedAt))
+        {
+            return false;
+        }
+
+        var text = TerminalText.StripControlSequences(terminalOutput);
+        var refreshIndex = text.LastIndexOf(
+            "Refreshing",
+            StringComparison.OrdinalIgnoreCase);
+        if (refreshIndex < 0)
+        {
+            return false;
+        }
+
+        if (text.Contains("could not refresh", StringComparison.OrdinalIgnoreCase) ||
+            text.Contains("rate limited", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var refreshedOutput = text[(refreshIndex + "Refreshing".Length)..];
+        return HasCompleteUsageScreen(refreshedOutput, observedAt);
+    }
 }
