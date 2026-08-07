@@ -1,4 +1,5 @@
 using System.IO;
+using System.IO.Compression;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using QuotaGlass.Models;
@@ -22,6 +23,9 @@ Require(Approximately(meter.PaceDelta(now), -0.30), "소진 속도 차이 계산
 var viewModel = new MeterUsageViewModel(meter, now);
 Require(viewModel.IsWarning, "5%p 초과 소진 경고");
 Require(viewModel.StatusText.Contains("30％p", StringComparison.Ordinal), "경고 차이 표시");
+Require(
+    viewModel.RemainingWithResetText == "30% · 6시간 0분 후 초기화",
+    "보조 meter 잔여량과 초기화까지 남은 시간 표시");
 
 var refreshService = new UsageRefreshService(MockUsageProvider.CreateDefaults());
 var snapshots = await refreshService.RefreshAsync(CancellationToken.None);
@@ -267,6 +271,7 @@ Require(
 
 RunStatusLineInstallerTests();
 RunCollapsedProviderStoreTests();
+RunManagedCliTests();
 
 const string antigravityQuotaFixture =
     """
@@ -377,83 +382,113 @@ if (args.Contains("--integration", StringComparer.Ordinal))
         "Cursor CLI 실제 사용량");
 }
 
-var exitCompleted = false;
-Exception? exitFailure = null;
-var exitThread = new Thread(() =>
+var uiTestRoot = Path.Combine(
+    Path.GetTempPath(),
+    $"QuotaGlass.App.{Guid.NewGuid():N}");
+var previousUiSettingsPath = Environment.GetEnvironmentVariable(
+    "QUOTAGLASS_CLAUDE_SETTINGS_PATH");
+var previousUiStateDirectory = Environment.GetEnvironmentVariable(
+    "QUOTAGLASS_STATE_DIRECTORY");
+try
 {
-    try
+    Environment.SetEnvironmentVariable(
+        "QUOTAGLASS_CLAUDE_SETTINGS_PATH",
+        Path.Combine(uiTestRoot, ".claude", "settings.json"));
+    Environment.SetEnvironmentVariable(
+        "QUOTAGLASS_STATE_DIRECTORY",
+        Path.Combine(uiTestRoot, "state"));
+
+    var exitCompleted = false;
+    Exception? exitFailure = null;
+    var exitThread = new Thread(() =>
     {
-        var application = new QuotaGlass.App();
-        application.EnforceSingleInstance = false;
-        application.ForceProcessExitOnShutdown = false;
-        application.InitializeComponent();
-        application.Dispatcher.BeginInvoke(
-            System.Windows.Threading.DispatcherPriority.ApplicationIdle,
-            () =>
-            {
-                var mainWindowField = typeof(QuotaGlass.App).GetField(
-                    "_mainWindow",
-                    System.Reflection.BindingFlags.Instance |
-                    System.Reflection.BindingFlags.NonPublic);
-                var widget = application.MainWindow;
-                Require(
-                    mainWindowField?.GetValue(application) is null &&
-                    widget is QuotaGlass.TaskbarWidgetWindow
-                    {
-                        IsVisible: true
-                    },
-                    "앱 시작 시 메인 창 지연 생성 및 위젯 표시");
-                var openMenuMethod = typeof(
-                    QuotaGlass.TaskbarWidgetWindow).GetMethod(
-                    "OpenFullWindowMenuItem_Click",
-                    System.Reflection.BindingFlags.Instance |
-                    System.Reflection.BindingFlags.NonPublic);
-                openMenuMethod?.Invoke(
-                    widget,
-                    [widget, new System.Windows.RoutedEventArgs()]);
-                Require(
-                    mainWindowField?.GetValue(application) is
-                        QuotaGlass.MainWindow
+        try
+        {
+            var application = new QuotaGlass.App();
+            application.EnforceSingleInstance = false;
+            application.ForceProcessExitOnShutdown = false;
+            application.InitializeComponent();
+            application.Dispatcher.BeginInvoke(
+                System.Windows.Threading.DispatcherPriority.ApplicationIdle,
+                () =>
+                {
+                    var mainWindowField = typeof(QuotaGlass.App).GetField(
+                        "_mainWindow",
+                        System.Reflection.BindingFlags.Instance |
+                        System.Reflection.BindingFlags.NonPublic);
+                    var widget = application.MainWindow;
+                    Require(
+                        mainWindowField?.GetValue(application) is null &&
+                        widget is QuotaGlass.TaskbarWidgetWindow
                         {
                             IsVisible: true
                         },
-                    "위젯 클릭 시 메인 창 지연 생성");
+                        "앱 시작 시 메인 창 지연 생성 및 위젯 표시");
+                    var openMenuMethod = typeof(
+                        QuotaGlass.TaskbarWidgetWindow).GetMethod(
+                        "OpenFullWindowMenuItem_Click",
+                        System.Reflection.BindingFlags.Instance |
+                        System.Reflection.BindingFlags.NonPublic);
+                    openMenuMethod?.Invoke(
+                        widget,
+                        [widget, new System.Windows.RoutedEventArgs()]);
+                    Require(
+                        mainWindowField?.GetValue(application) is
+                            QuotaGlass.MainWindow
+                        {
+                            IsVisible: true
+                        },
+                        "위젯 클릭 시 메인 창 지연 생성");
 
-                var dismissMethod = typeof(QuotaGlass.App).GetMethod(
-                    "DismissFullWindow",
-                    System.Reflection.BindingFlags.Instance |
-                    System.Reflection.BindingFlags.NonPublic);
-                dismissMethod?.Invoke(application, null);
-                Require(
-                    mainWindowField?.GetValue(application) is null &&
-                    widget.IsVisible,
-                    "메인 창 닫을 때 객체 해제 및 위젯 유지");
+                    var dismissMethod = typeof(QuotaGlass.App).GetMethod(
+                        "DismissFullWindow",
+                        System.Reflection.BindingFlags.Instance |
+                        System.Reflection.BindingFlags.NonPublic);
+                    dismissMethod?.Invoke(application, null);
+                    Require(
+                        mainWindowField?.GetValue(application) is null &&
+                        widget.IsVisible,
+                        "메인 창 닫을 때 객체 해제 및 위젯 유지");
 
-                var exitMenuMethod = typeof(
-                    QuotaGlass.TaskbarWidgetWindow).GetMethod(
-                    "ExitMenuItem_Click",
-                    System.Reflection.BindingFlags.Instance |
-                    System.Reflection.BindingFlags.NonPublic);
-                exitMenuMethod?.Invoke(
-                    widget,
-                    [widget, new System.Windows.RoutedEventArgs()]);
-            });
-        application.Run();
-        exitCompleted = true;
-    }
-    catch (Exception exception)
+                    var exitMenuMethod = typeof(
+                        QuotaGlass.TaskbarWidgetWindow).GetMethod(
+                        "ExitMenuItem_Click",
+                        System.Reflection.BindingFlags.Instance |
+                        System.Reflection.BindingFlags.NonPublic);
+                    exitMenuMethod?.Invoke(
+                        widget,
+                        [widget, new System.Windows.RoutedEventArgs()]);
+                });
+            application.Run();
+            exitCompleted = true;
+        }
+        catch (Exception exception)
+        {
+            exitFailure = exception;
+        }
+    });
+    exitThread.SetApartmentState(ApartmentState.STA);
+    exitThread.Start();
+    Require(
+        exitThread.Join(TimeSpan.FromSeconds(10)) &&
+        exitCompleted &&
+        exitFailure is null,
+        $"작업표시줄 위젯 종료 시 WPF 메시지 루프 종료{(
+            exitFailure is null ? string.Empty : $" · {exitFailure.Message}")}");
+}
+finally
+{
+    Environment.SetEnvironmentVariable(
+        "QUOTAGLASS_CLAUDE_SETTINGS_PATH",
+        previousUiSettingsPath);
+    Environment.SetEnvironmentVariable(
+        "QUOTAGLASS_STATE_DIRECTORY",
+        previousUiStateDirectory);
+    if (Directory.Exists(uiTestRoot))
     {
-        exitFailure = exception;
+        Directory.Delete(uiTestRoot, recursive: true);
     }
-});
-exitThread.SetApartmentState(ApartmentState.STA);
-exitThread.Start();
-Require(
-    exitThread.Join(TimeSpan.FromSeconds(10)) &&
-    exitCompleted &&
-    exitFailure is null,
-    $"작업표시줄 위젯 종료 시 WPF 메시지 루프 종료{(
-        exitFailure is null ? string.Empty : $" · {exitFailure.Message}")}");
+}
 
 Console.WriteLine("QuotaGlass smoke tests passed.");
 return;
@@ -470,6 +505,8 @@ void RunStatusLineInstallerTests()
         "QUOTAGLASS_CLAUDE_SETTINGS_PATH");
     var previousStateDirectory = Environment.GetEnvironmentVariable(
         "QUOTAGLASS_STATE_DIRECTORY");
+    var previousExecutablePath = Environment.GetEnvironmentVariable(
+        "QUOTAGLASS_EXECUTABLE_PATH");
 
     try
     {
@@ -479,10 +516,11 @@ void RunStatusLineInstallerTests()
         Environment.SetEnvironmentVariable(
             "QUOTAGLASS_STATE_DIRECTORY",
             stateDirectory);
+        var executablePath = Path.Combine(root, "QuotaGlass.exe");
+        Environment.SetEnvironmentVariable(
+            "QUOTAGLASS_EXECUTABLE_PATH",
+            executablePath);
 
-        var bridgeScriptPath = Path.Combine(
-            stateDirectory,
-            "claude-statusline-bridge.ps1");
         var bridgeConfigurationPath = Path.Combine(
             stateDirectory,
             "claude-statusline-bridge.json");
@@ -492,18 +530,20 @@ void RunStatusLineInstallerTests()
 
         var settings = ReadJsonObject(settingsPath);
         Require(
-            File.Exists(bridgeScriptPath),
-            "status line 미설정 시 bridge 스크립트 설치");
-        Require(
             ReadCommand(settings)?.Contains(
-                bridgeScriptPath,
+                executablePath,
                 StringComparison.Ordinal) == true,
             "status line 미설정 시 bridge 명령 등록");
         Require(
             ReadCommand(settings)?.Contains(
-                "-WindowStyle Hidden",
+                ClaudeStatusLineInstaller.BridgeMarker,
                 StringComparison.OrdinalIgnoreCase) == true,
-            "status line bridge 터미널 창 숨김");
+            "status line bridge WinExe 내부 명령 등록");
+        Require(
+            ReadCommand(settings)?.Contains(
+                "powershell",
+                StringComparison.OrdinalIgnoreCase) == false,
+            "status line bridge PowerShell 콘솔 제거");
         Require(
             settings["theme"]?.GetValue<string>() == "dark",
             "설치 시 기존 설정 보존");
@@ -523,7 +563,7 @@ void RunStatusLineInstallerTests()
         ClaudeStatusLineInstaller.EnsureInstalled();
         Require(
             ReadCommand(ReadJsonObject(settingsPath))?.Contains(
-                bridgeScriptPath,
+                ClaudeStatusLineInstaller.BridgeMarker,
                 StringComparison.Ordinal) == true,
             "기존 status line 래핑");
         Require(
@@ -532,9 +572,7 @@ void RunStatusLineInstallerTests()
             "기존 status line 명령 보존");
 
         File.Delete(bridgeConfigurationPath);
-        var statusLineOutput = RunBridgeScript(
-            bridgeScriptPath,
-            stateDirectory,
+        const string payload =
             """
             {
               "model": { "display_name": "Opus 5" },
@@ -543,11 +581,18 @@ void RunStatusLineInstallerTests()
                 "five_hour": { "used_percentage": 12.5, "resets_at": 1784876400 }
               }
             }
-            """);
+            """;
+        using var output = new StringWriter();
+        var bridgeExitCode = ClaudeStatusLineBridge.Run(
+            new StringReader(payload),
+            output,
+            stateDirectory);
+        var statusLineOutput = output.ToString();
         var cachePath = Path.Combine(stateDirectory, "claude-rate-limits.json");
+        Require(bridgeExitCode == 0, "WinExe bridge 정상 종료");
         Require(
             File.Exists(cachePath),
-            "bridge 스크립트가 rate limit 캐시 기록");
+            "WinExe bridge가 rate limit 캐시 기록");
         Require(
             ClaudeRateLimitParser.Parse(File.ReadAllText(cachePath)).Count == 1,
             "캐시된 rate limit 파싱");
@@ -555,6 +600,70 @@ void RunStatusLineInstallerTests()
             statusLineOutput.Contains("Opus 5", StringComparison.Ordinal) &&
             statusLineOutput.Contains("QuotaGlass", StringComparison.Ordinal),
             "원본 명령이 없을 때 기본 status line 출력");
+
+        var bridgeStartInfo = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = Path.Combine(AppContext.BaseDirectory, "QuotaGlass.exe"),
+            UseShellExecute = false,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+            WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden
+        };
+        bridgeStartInfo.ArgumentList.Add(
+            ClaudeStatusLineInstaller.BridgeMarker);
+        bridgeStartInfo.Environment["QUOTAGLASS_STATE_DIRECTORY"] =
+            stateDirectory;
+        using var bridgeProcess = System.Diagnostics.Process.Start(
+            bridgeStartInfo)
+            ?? throw new InvalidOperationException(
+                "WinExe status-line bridge를 시작하지 못했습니다.");
+        var bridgeErrorTask = bridgeProcess.StandardError.ReadToEndAsync();
+        bridgeProcess.StandardInput.Write(payload);
+        bridgeProcess.StandardInput.Close();
+        var processOutput = bridgeProcess.StandardOutput.ReadToEnd();
+        bridgeProcess.WaitForExit();
+        var processError = bridgeErrorTask.GetAwaiter().GetResult();
+        Require(
+            bridgeProcess.ExitCode == 0 &&
+            processOutput.Contains("Opus 5", StringComparison.Ordinal),
+            $"WinExe bridge 표준 입출력 연결{(
+                string.IsNullOrWhiteSpace(processError)
+                    ? string.Empty
+                    : $" · {processError.Trim()}")}");
+
+        var shellStartInfo = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = Environment.GetEnvironmentVariable("COMSPEC")
+                       ?? "cmd.exe",
+            Arguments = $"/d /s /c \"\"{Path.Combine(AppContext.BaseDirectory, "QuotaGlass.exe")}\" {ClaudeStatusLineInstaller.BridgeMarker}\"",
+            UseShellExecute = false,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+            WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden
+        };
+        shellStartInfo.Environment["QUOTAGLASS_STATE_DIRECTORY"] =
+            stateDirectory;
+        using var shellProcess = System.Diagnostics.Process.Start(
+            shellStartInfo)
+            ?? throw new InvalidOperationException(
+                "쉘 경유 WinExe status-line bridge를 시작하지 못했습니다.");
+        var shellErrorTask = shellProcess.StandardError.ReadToEndAsync();
+        shellProcess.StandardInput.Write(payload);
+        shellProcess.StandardInput.Close();
+        var shellOutput = shellProcess.StandardOutput.ReadToEnd();
+        shellProcess.WaitForExit();
+        var shellError = shellErrorTask.GetAwaiter().GetResult();
+        Require(
+            shellProcess.ExitCode == 0 &&
+            shellOutput.Contains("Opus 5", StringComparison.Ordinal),
+            $"Claude 쉘 호출 방식의 bridge 표준 입출력 연결{(
+                string.IsNullOrWhiteSpace(shellError)
+                    ? string.Empty
+                    : $" · {shellError.Trim()}")}");
     }
     finally
     {
@@ -564,6 +673,9 @@ void RunStatusLineInstallerTests()
         Environment.SetEnvironmentVariable(
             "QUOTAGLASS_STATE_DIRECTORY",
             previousStateDirectory);
+        Environment.SetEnvironmentVariable(
+            "QUOTAGLASS_EXECUTABLE_PATH",
+            previousExecutablePath);
         try
         {
             Directory.Delete(root, true);
@@ -582,36 +694,6 @@ void RunStatusLineInstallerTests()
     static string? ReadCommand(JsonObject settings) =>
         settings["statusLine"]?["command"]?.GetValue<string>();
 
-    static string RunBridgeScript(
-        string scriptPath,
-        string stateDirectory,
-        string payload)
-    {
-        var startInfo = new System.Diagnostics.ProcessStartInfo
-        {
-            FileName = "powershell.exe",
-            UseShellExecute = false,
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            CreateNoWindow = true
-        };
-        startInfo.ArgumentList.Add("-NoProfile");
-        startInfo.ArgumentList.Add("-NonInteractive");
-        startInfo.ArgumentList.Add("-ExecutionPolicy");
-        startInfo.ArgumentList.Add("Bypass");
-        startInfo.ArgumentList.Add("-File");
-        startInfo.ArgumentList.Add(scriptPath);
-        startInfo.Environment["QUOTAGLASS_STATE_DIRECTORY"] = stateDirectory;
-
-        using var process = System.Diagnostics.Process.Start(startInfo)
-            ?? throw new InvalidOperationException(
-                "bridge 스크립트를 실행하지 못했습니다.");
-        process.StandardInput.Write(payload);
-        process.StandardInput.Close();
-        var output = process.StandardOutput.ReadToEnd();
-        process.WaitForExit();
-        return output;
-    }
 }
 
 void RunCollapsedProviderStoreTests()
@@ -631,6 +713,138 @@ void RunCollapsedProviderStoreTests()
         Require(
             restoredProviderIds.SetEquals(["codex", "cursor"]),
             "접은 에이전트 상태 저장 및 복원");
+    }
+    finally
+    {
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+}
+
+void RunManagedCliTests()
+{
+    const string githubReleaseFixture =
+        """
+        {
+          "tag_name": "v1.2.3",
+          "assets": [
+            {
+              "name": "tool-win32-x64.zip",
+              "browser_download_url": "https://github.com/example/tool.zip",
+              "digest": "sha256:0123456789abcdef"
+            }
+          ]
+        }
+        """;
+    var githubRelease = ManagedCliInstaller.ParseGitHubRelease(
+        githubReleaseFixture,
+        "tool-win32-x64.zip");
+    Require(
+        githubRelease.Version == "v1.2.3" && githubRelease.IsZip &&
+        githubRelease.ExpectedHash == "0123456789abcdef",
+        "GitHub 관리 CLI 릴리스 파싱");
+
+    const string claudeManifestFixture =
+        """
+        {
+          "platforms": {
+            "win32-x64": { "checksum": "aabbcc" }
+          }
+        }
+        """;
+    var claudeRelease = ManagedCliInstaller.ParseClaudeRelease(
+        "2.3.4",
+        claudeManifestFixture,
+        "win32-x64",
+        "https://downloads.example/releases");
+    Require(
+        claudeRelease.DownloadUrl.AbsoluteUri.EndsWith(
+            "/2.3.4/win32-x64/claude.exe",
+            StringComparison.Ordinal) &&
+        claudeRelease.ExpectedHash == "aabbcc",
+        "Claude 관리 CLI 릴리스 파싱");
+
+    const string antigravityManifestFixture =
+        """
+        {
+          "version": "1.4.0",
+          "url": "https://downloads.example/agy.exe",
+          "sha512": "ddeeff"
+        }
+        """;
+    var antigravityRelease = ManagedCliInstaller.ParseAntigravityRelease(
+        antigravityManifestFixture);
+    Require(
+        antigravityRelease.Version == "1.4.0" &&
+        antigravityRelease.ExpectedHash == "ddeeff",
+        "Antigravity 관리 CLI 릴리스 파싱");
+
+    var root = Path.Combine(
+        Path.GetTempPath(),
+        $"QuotaGlass.ManagedCli.{Guid.NewGuid():N}");
+    try
+    {
+        var executablePath = Path.Combine(
+            root,
+            "codex",
+            "v1",
+            "codex.exe");
+        Directory.CreateDirectory(Path.GetDirectoryName(executablePath)!);
+        File.WriteAllBytes(executablePath, [0x4d, 0x5a]);
+        ManagedCliStore.Activate(
+            root,
+            "codex",
+            "v1",
+            executablePath);
+        Require(
+            ManagedCliStore.FindExecutable(root, "codex") == executablePath,
+            "관리 CLI 활성 버전 복원");
+
+        var previousToolsDirectory = Environment.GetEnvironmentVariable(
+            "QUOTAGLASS_TOOLS_DIRECTORY");
+        var previousPath = Environment.GetEnvironmentVariable("PATH");
+        try
+        {
+            Environment.SetEnvironmentVariable(
+                "QUOTAGLASS_TOOLS_DIRECTORY",
+                root);
+            Environment.SetEnvironmentVariable("PATH", string.Empty);
+            var managedCodex = new AgentInstallationDetector()
+                .Detect()
+                .Single(installation => installation.ProviderId == "codex");
+            Require(
+                managedCodex.ExecutablePath == executablePath,
+                "시스템 PATH 부재 시 관리 CLI fallback");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(
+                "QUOTAGLASS_TOOLS_DIRECTORY",
+                previousToolsDirectory);
+            Environment.SetEnvironmentVariable("PATH", previousPath);
+        }
+
+        var archivePath = Path.Combine(root, "unsafe.zip");
+        using (var archive = ZipFile.Open(archivePath, ZipArchiveMode.Create))
+        {
+            archive.CreateEntry("../escape.exe");
+        }
+
+        var rejectedUnsafeArchive = false;
+        try
+        {
+            ManagedCliInstaller.ExtractZipSafely(
+                archivePath,
+                Path.Combine(root, "extract"));
+        }
+        catch (InvalidDataException)
+        {
+            rejectedUnsafeArchive = true;
+        }
+
+        Require(rejectedUnsafeArchive, "관리 CLI Zip Slip 차단");
     }
     finally
     {

@@ -16,7 +16,8 @@ AI Credits와 다음 refill 시각을 읽습니다. Claude Code는 `auth status`
 로그인을 확인하고 Team 계정은 headless `/usage` 화면에서 5시간·주간 사용량을
 읽습니다. Pro/Max 계정은 공식 status-line JSON의 `rate_limits.five_hour`와
 `rate_limits.seven_day`도 지원합니다. 기존 status line은 브리지 뒤에 그대로
-연결됩니다. Antigravity는 공식 `agy` CLI가 자체 인증으로 제공하는 로컬
+연결됩니다. 브리지는 별도 PowerShell 콘솔을 만들지 않고 QuotaGlass 실행 파일의
+숨김 명령 모드에서 동작합니다. Antigravity는 공식 `agy` CLI가 자체 인증으로 제공하는 로컬
 `RetrieveUserQuotaSummary` RPC를 통해 Gemini 및 Claude/GPT 모델 그룹의
 5시간·주간 quota를 읽습니다. GitHub Copilot은 설치된 공식 Copilot CLI를
 headless JSON-RPC 서버로 실행하고, 기존 로그인을 재사용하는

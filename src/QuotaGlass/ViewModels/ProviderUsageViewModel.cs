@@ -48,7 +48,7 @@ public sealed class ProviderUsageViewModel
         }
 
         var meters = Meters.Select(meter =>
-            $"{meter.Label} {meter.RemainingText}" +
+            $"{meter.Label} {meter.RemainingWithResetText}" +
             (meter.IsWarning ? " ⚠" : string.Empty));
         return $"{DisplayName}\n{string.Join("\n", meters)}\n클릭해서 전체 보기";
     }

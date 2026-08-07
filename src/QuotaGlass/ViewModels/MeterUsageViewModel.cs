@@ -20,11 +20,14 @@ public sealed class MeterUsageViewModel
         IsWatch = !IsReset && !IsWarning && PaceDelta < 0;
         RemainingText = FormatRemaining(meter);
         CompactLabel = FormatCompactLabel(meter.Label);
-        ResetText = IsReset
-            ? $"{Label} · 초기화 완료 · 새 사용 가능"
+        ResetCountdownText = IsReset
+            ? "초기화 완료 · 새 사용 가능"
             : meter.ResetsAt <= now
-                ? $"{Label} · 초기화 시각 지남 · 갱신 필요"
-                : $"{Label} · {FormatDuration(meter.ResetsAt - now)} 후 초기화";
+                ? "초기화 시각 지남 · 갱신 필요"
+                : $"{FormatDuration(meter.ResetsAt - now)} 후 초기화";
+        ResetText = $"{Label} · {ResetCountdownText}";
+        RemainingWithResetText =
+            $"{RemainingText} · {ResetCountdownText}";
         StatusText = IsReset
             ? "✓ 초기화 완료 · 사용 가능"
             : FormatStatus(PaceDelta, IsWarning, IsWatch);
@@ -39,7 +42,9 @@ public sealed class MeterUsageViewModel
     public bool IsReset { get; }
     public DateTimeOffset ResetsAt { get; }
     public string RemainingText { get; }
+    public string RemainingWithResetText { get; }
     public string CompactLabel { get; }
+    public string ResetCountdownText { get; }
     public string ResetText { get; }
     public string StatusText { get; }
 

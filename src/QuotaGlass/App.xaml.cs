@@ -31,6 +31,16 @@ public partial class App : System.Windows.Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+
+        if (e.Args.Contains(
+                ClaudeStatusLineInstaller.BridgeMarker,
+                StringComparer.Ordinal))
+        {
+            var exitCode = ClaudeStatusLineBridge.Run();
+            Shutdown(exitCode);
+            return;
+        }
+
         System.Windows.Media.RenderOptions.ProcessRenderMode =
             System.Windows.Interop.RenderMode.SoftwareOnly;
 
@@ -47,14 +57,6 @@ public partial class App : System.Windows.Application
         catch
         {
             // Claude integration failure must not prevent the overlay from opening.
-        }
-
-        if (e.Args.Contains(
-                "--install-claude-bridge",
-                StringComparer.Ordinal))
-        {
-            Shutdown();
-            return;
         }
 
         _themeService = new ThemeService(this);

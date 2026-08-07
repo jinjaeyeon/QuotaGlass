@@ -335,7 +335,7 @@
                                             <DataTemplate>
                                                 <Grid Margin="0,3,0,2">
                                                     <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="132" />
+                                                        <ColumnDefinition Width="210" />
                                                         <ColumnDefinition Width="*" />
                                                         <ColumnDefinition Width="Auto" />
                                                     </Grid.ColumnDefinitions>
@@ -344,8 +344,8 @@
                                                                FontSize="11"
                                                                Margin="0,0,8,0"
                                                                TextTrimming="CharacterEllipsis"
-                                                               ToolTip="{Binding Label}"
-                                                               Text="{Binding Label}" />
+                                                               ToolTip="{Binding ResetText}"
+                                                               Text="{Binding ResetText}" />
                                                     <controls:PacedUsageBar Grid.Column="1"
                                                                             Height="26"
                                                                             Margin="0,0,10,0"
