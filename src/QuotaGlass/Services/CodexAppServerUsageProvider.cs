@@ -143,7 +143,8 @@ public sealed class CodexAppServerUsageProvider(
             accountLabel,
             meters,
             now,
-            "Codex app-server");
+            "Codex app-server",
+            ResetCredits: CodexRateLimitResetCreditParser.Parse(result));
     }
 
     private static JsonElement SelectRateLimits(JsonElement result)

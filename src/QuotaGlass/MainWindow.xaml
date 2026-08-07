@@ -132,6 +132,7 @@
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
                                     </Grid.RowDefinitions>
 
                                     <Border Grid.RowSpan="2"
@@ -315,7 +316,27 @@
                                         </TextBlock.Style>
                                     </TextBlock>
 
-                                    <ItemsControl Grid.Row="4"
+                                    <TextBlock Grid.Row="4"
+                                               Grid.Column="1"
+                                               Grid.ColumnSpan="2"
+                                               Margin="0,7,0,0"
+                                               Foreground="{DynamicResource MutedTextBrush}"
+                                               FontSize="11"
+                                               Text="{Binding ResetCreditSummaryText}">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding HasResetCreditSummary}"
+                                                                 Value="False">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+
+                                    <ItemsControl Grid.Row="5"
                                                   Grid.Column="1"
                                                   Grid.ColumnSpan="2"
                                                   Margin="0,9,0,0"

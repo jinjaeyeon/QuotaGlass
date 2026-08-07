@@ -9,7 +9,8 @@ public sealed record UsageSnapshot(
     DateTimeOffset ObservedAt,
     string Source,
     UsageSnapshotState State = UsageSnapshotState.Available,
-    string? StatusMessage = null);
+    string? StatusMessage = null,
+    ResetCreditSummary? ResetCredits = null);
 
 public enum UsageSnapshotState
 {

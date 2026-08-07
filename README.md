@@ -11,7 +11,8 @@ Codex, Claude Code, GitHub Copilot, Antigravity CLI가 시스템에서 발견되
 CLI가 나중에 설치되면 시스템 CLI를 우선 사용합니다.
 
 현재 Codex는 공식 로컬 app-server의 `account/rateLimits/read`를 통해 실제
-rate-limit 데이터를 읽습니다. JetBrains AI는 IDE의 로컬 quota 상태에서 월간
+rate-limit 데이터와 남은 리셋 티켓 개수, 가장 이른 티켓 기한을 읽습니다.
+JetBrains AI는 IDE의 로컬 quota 상태에서 월간
 AI Credits와 다음 refill 시각을 읽습니다. Claude Code는 `auth status`로 구독
 로그인을 확인하고 Team 계정은 headless `/usage` 화면에서 5시간·주간 사용량을
 읽습니다. Pro/Max 계정은 공식 status-line JSON의 `rate_limits.five_hour`와

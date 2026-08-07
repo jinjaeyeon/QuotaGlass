@@ -57,6 +57,52 @@ Require(
     codex.Meters is [{ Id: "monthly" }],
     "팀 Codex 월간 meter");
 
+const string codexResetCreditsFixture =
+    """
+    {
+      "rateLimitResetCredits": {
+        "availableCount": 3,
+        "credits": [
+          {
+            "id": "later",
+            "status": "available",
+            "expiresAt": 1785438000
+          },
+          {
+            "id": "redeemed",
+            "status": "redeemed",
+            "expiresAt": 1784000000
+          },
+          {
+            "id": "earlier",
+            "status": "available",
+            "expiresAt": 1784876400
+          }
+        ]
+      }
+    }
+    """;
+using (var codexResetCreditsDocument = JsonDocument.Parse(
+           codexResetCreditsFixture))
+{
+    var resetCredits = CodexRateLimitResetCreditParser.Parse(
+        codexResetCreditsDocument.RootElement);
+    Require(resetCredits?.AvailableCount == 3, "Codex 리셋 티켓 잔여 개수");
+    Require(
+        resetCredits?.EarliestExpiresAt ==
+        DateTimeOffset.FromUnixTimeSeconds(1784876400),
+        "Codex 가장 이른 리셋 티켓 기한");
+
+    var resetCreditsViewModel = new ProviderUsageViewModel(
+        codex with { ResetCredits = resetCredits },
+        now);
+    Require(
+        resetCreditsViewModel.ResetCreditSummaryText?.Contains(
+            "리셋 티켓 3장",
+            StringComparison.Ordinal) == true,
+        "Codex 리셋 티켓 카드 문구");
+}
+
 const string copilotQuotaFixture =
     """
     {
