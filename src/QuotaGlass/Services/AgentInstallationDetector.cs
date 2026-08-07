@@ -31,16 +31,7 @@ public sealed class AgentInstallationDetector
             "GH",
             "copilot");
 
-        AddDesktopAgent(
-            installations,
-            "antigravity",
-            "Antigravity",
-            "✦",
-            Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Programs",
-                "antigravity",
-                "Antigravity.exe"));
+        AddAntigravity(installations);
 
         AddCursor(installations);
 
@@ -67,7 +58,9 @@ public sealed class AgentInstallationDetector
         string iconText,
         string command)
     {
-        var path = FindOnPath(command);
+        var path = FindFirstExisting(
+            FindOnPath(command),
+            ManagedCliStore.FindExecutable(providerId));
         if (path is null)
         {
             return;
@@ -83,26 +76,35 @@ public sealed class AgentInstallationDetector
                 ReadVersion(path)));
     }
 
-    private static void AddDesktopAgent(
-        ICollection<AgentInstallation> installations,
-        string providerId,
-        string displayName,
-        string iconText,
-        string? path)
+    private static void AddAntigravity(
+        ICollection<AgentInstallation> installations)
     {
-        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+        var localAppData = Environment.GetFolderPath(
+            Environment.SpecialFolder.LocalApplicationData);
+        var cliPath = FindFirstExisting(
+            FindOnPath("agy"),
+            Path.Combine(localAppData, "agy", "bin", "agy.exe"),
+            ManagedCliStore.FindExecutable("antigravity"));
+        var desktopPath = FindFirstExisting(
+            Path.Combine(
+                localAppData,
+                "Programs",
+                "antigravity",
+                "Antigravity.exe"));
+
+        if (cliPath is null && desktopPath is null)
         {
             return;
         }
 
         installations.Add(
             new AgentInstallation(
-                providerId,
-                displayName,
-                iconText,
-                "설치됨",
-                path,
-                ReadVersion(path!)));
+                "antigravity",
+                "Antigravity",
+                "✦",
+                cliPath is null ? "IDE 설치됨" : "설치됨",
+                cliPath,
+                cliPath is null ? null : ReadVersion(cliPath)));
     }
 
     private static void AddCursor(

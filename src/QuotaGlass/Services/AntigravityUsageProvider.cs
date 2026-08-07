@@ -14,7 +14,7 @@ public sealed class AntigravityUsageProvider(
         new HttpClientHandler
         {
             UseProxy = false
-    })
+        })
     {
         Timeout = TimeSpan.FromSeconds(5)
     };
@@ -27,12 +27,8 @@ public sealed class AntigravityUsageProvider(
     public async Task<UsageSnapshot> FetchAsync(
         CancellationToken cancellationToken)
     {
-        var cliPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "agy",
-            "bin",
-            "agy.exe");
-        if (!File.Exists(cliPath))
+        var cliPath = installation.ExecutablePath;
+        if (string.IsNullOrWhiteSpace(cliPath) || !File.Exists(cliPath))
         {
             return new UsageSnapshot(
                 ProviderId,

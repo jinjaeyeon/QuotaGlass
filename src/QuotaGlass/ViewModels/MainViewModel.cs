@@ -6,7 +6,8 @@ namespace QuotaGlass.ViewModels;
 
 public sealed class MainViewModel : ObservableObject, IDisposable
 {
-    private readonly UsageRefreshService _refreshService;
+    private UsageRefreshService _refreshService;
+    private readonly ManagedCliInstaller _managedCliInstaller = new();
     private readonly DispatcherTimer _refreshTimer;
     private readonly Dictionary<string, int> _providerOrder = new(
         StringComparer.Ordinal);
@@ -19,8 +20,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public MainViewModel()
     {
         _collapsedProviderIds = CollapsedProviderStore.Load();
-        _refreshService = new UsageRefreshService(
-            UsageProviderFactory.CreateInstalledProviders());
+        _refreshService = new UsageRefreshService([]);
+        ReloadProviders();
 
         RefreshCommand = new AsyncRelayCommand(
             RefreshAsync,
@@ -37,6 +38,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public ObservableCollection<ProviderUsageViewModel> Providers { get; } = [];
     public ObservableCollection<ProviderUsageViewModel> VisibleProviders { get; } = [];
     public ObservableCollection<ProviderUsageViewModel> CollapsedProviders { get; } = [];
+    public ObservableCollection<ManagedCliOptionViewModel> ManagedCliOptions { get; } = [];
 
     public AsyncRelayCommand RefreshCommand { get; }
     public event EventHandler? ProvidersUpdated;
@@ -128,6 +130,52 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         finally
         {
             IsRefreshing = false;
+        }
+    }
+
+    private void ReloadProviders()
+    {
+        var installations = new AgentInstallationDetector().Detect();
+        _refreshService = new UsageRefreshService(
+            UsageProviderFactory.CreateProviders(installations));
+        Providers.Clear();
+        VisibleProviders.Clear();
+        CollapsedProviders.Clear();
+        ReloadManagedCliOptions(installations);
+    }
+
+    private Task ReloadProvidersAndRefreshAsync()
+    {
+        ReloadProviders();
+        return RefreshAsync();
+    }
+
+    private void ReloadManagedCliOptions(
+        IReadOnlyList<AgentInstallation> installations)
+    {
+        ManagedCliOptions.Clear();
+        foreach (var definition in ManagedCliCatalog.All)
+        {
+            var managedPath = ManagedCliStore.FindExecutable(
+                definition.ProviderId);
+            var installation = installations.FirstOrDefault(candidate =>
+                candidate.ProviderId == definition.ProviderId);
+            var hasSystemCli = installation?.ExecutablePath is not null &&
+                               !string.Equals(
+                                   installation.ExecutablePath,
+                                   managedPath,
+                                   StringComparison.OrdinalIgnoreCase);
+            if (hasSystemCli)
+            {
+                continue;
+            }
+
+            ManagedCliOptions.Add(
+                new ManagedCliOptionViewModel(
+                    definition,
+                    _managedCliInstaller,
+                    managedPath,
+                    ReloadProvidersAndRefreshAsync));
         }
     }
 

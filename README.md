@@ -2,7 +2,14 @@
 
 .NET 10, WPF, C#으로 만든 Windows용 AI 코딩 도구 사용량 오버레이 프로토타입입니다.
 
-실행 시 로컬 설치 상태를 감지하며, 설치되지 않은 에이전트는 표시하지 않습니다.
+실행 시 로컬 설치 상태를 감지하며, 설치된 에이전트의 사용량 카드만 표시합니다.
+Codex, Claude Code, GitHub Copilot, Antigravity CLI가 시스템에서 발견되지
+않으면 메인 창의 `QuotaGlass 전용 CLI` 영역에서 앱 전용 복사본을 설치할 수
+있습니다. 전용 CLI는 `%LOCALAPPDATA%\QuotaGlass\tools` 아래에만 저장되며
+시스템 `PATH`나 전역 npm 설치를 변경하지 않습니다. 다운로드 파일은 공식
+릴리스 메타데이터의 SHA-256 또는 SHA-512로 검증한 뒤 활성화합니다. 시스템
+CLI가 나중에 설치되면 시스템 CLI를 우선 사용합니다.
+
 현재 Codex는 공식 로컬 app-server의 `account/rateLimits/read`를 통해 실제
 rate-limit 데이터를 읽습니다. JetBrains AI는 IDE의 로컬 quota 상태에서 월간
 AI Credits와 다음 refill 시각을 읽습니다. Claude Code는 `auth status`로 구독
@@ -17,6 +24,12 @@ headless JSON-RPC 서버로 실행하고, 기존 로그인을 재사용하는
 읽습니다. Cursor는 Cursor Agent CLI의 로컬 로그인 상태를 재사용해 CLI의
 `/usage` 화면과 같은 `GetCurrentPeriodUsage`를 호출하고, 현재 결제 주기의
 포함 사용량 잔량을 읽습니다.
+
+전용 CLI 설치 후 인증이 필요하면 같은 영역의 `로그인/설정` 버튼을 사용합니다.
+Copilot은 열린 터미널에서 `/login`을 입력해야 합니다. Cursor는 Windows에서
+기존 Cursor 로그인 상태를 재사용하며 전용 CLI 설치 대상에 포함하지 않습니다.
+JetBrains AI는 독립 CLI가 없어 설치된 IDE 플러그인의 quota 캐시를 계속
+사용합니다.
 
 제한 구간은 서비스에 고정하지 않습니다. Codex 어댑터는 현재 계정이 반환한
 primary/secondary window를 meter로 변환합니다. 따라서 개인 계정의

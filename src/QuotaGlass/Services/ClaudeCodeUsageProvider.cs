@@ -66,6 +66,7 @@ public sealed class ClaudeCodeUsageProvider(
             CreateNoWindow = true,
             WindowStyle = ProcessWindowStyle.Hidden
         };
+        startInfo.Environment["DISABLE_AUTOUPDATER"] = "1";
         startInfo.ArgumentList.Add("auth");
         startInfo.ArgumentList.Add("status");
 
@@ -222,6 +223,7 @@ public sealed class ClaudeCodeUsageProvider(
             CreateNoWindow = true,
             WindowStyle = ProcessWindowStyle.Hidden
         };
+        startInfo.Environment["DISABLE_AUTOUPDATER"] = "1";
         startInfo.ArgumentList.Add("--headless");
         startInfo.ArgumentList.Add(executablePath);
         startInfo.ArgumentList.Add("--ax-screen-reader");

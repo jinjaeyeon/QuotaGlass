@@ -8,10 +8,14 @@ public static class UsageProviderFactory
     {
         var detector = new AgentInstallationDetector();
 
-        return detector.Detect()
+        return CreateProviders(detector.Detect());
+    }
+
+    public static IReadOnlyList<IUsageProvider> CreateProviders(
+        IReadOnlyList<AgentInstallation> installations) =>
+        installations
             .Select(CreateProvider)
             .ToArray();
-    }
 
     private static IUsageProvider CreateProvider(
         AgentInstallation installation) =>
