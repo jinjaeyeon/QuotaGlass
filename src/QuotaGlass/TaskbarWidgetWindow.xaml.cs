@@ -171,11 +171,13 @@ public partial class TaskbarWidgetWindow : Window
 
         var handle = new WindowInteropHelper(this).Handle;
         var taskbar = FindWindow("Shell_TrayWnd", null);
+        var isTaskbarHidden = taskbar != nint.Zero &&
+                              !TaskbarVisibilityDetector.IsShown(taskbar);
         var shouldHide = !_freeMovementEnabled &&
                          (FullscreenWindowDetector.IsForegroundFullscreenOn(
-                              handle) ||
-                          taskbar != nint.Zero &&
-                          !TaskbarVisibilityDetector.IsShown(taskbar));
+                               handle) ||
+                          isTaskbarHidden &&
+                          !WidgetContextMenu.IsOpen);
         if (shouldHide == _isHiddenAutomatically)
         {
             return shouldHide;
@@ -668,7 +670,7 @@ public partial class TaskbarWidgetWindow : Window
 
     private void PositionOnTaskbar()
     {
-        if (!IsLoaded || _isDragging)
+        if (!IsLoaded || _isDragging || WidgetContextMenu.IsOpen)
         {
             return;
         }
