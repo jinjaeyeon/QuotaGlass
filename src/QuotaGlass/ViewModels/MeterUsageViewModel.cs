@@ -31,6 +31,7 @@ public sealed class MeterUsageViewModel
         StatusText = IsReset
             ? "✓ 초기화 완료 · 사용 가능"
             : FormatStatus(PaceDelta, IsWarning, IsWatch);
+        CompactRemainingText = $"{RemainingRatio:P0}";
     }
 
     public string Label { get; }
@@ -42,6 +43,7 @@ public sealed class MeterUsageViewModel
     public bool IsReset { get; }
     public DateTimeOffset ResetsAt { get; }
     public string RemainingText { get; }
+    public string CompactRemainingText { get; }
     public string RemainingWithResetText { get; }
     public string CompactLabel { get; }
     public string ResetCountdownText { get; }
@@ -50,11 +52,26 @@ public sealed class MeterUsageViewModel
 
     private static string FormatCompactLabel(string label)
     {
+        if (label.Contains("월간", StringComparison.Ordinal))
+        {
+            return "월간";
+        }
+
+        if (label.Contains("주간", StringComparison.Ordinal))
+        {
+            return "주간";
+        }
+
+        var hourIndex = label.IndexOf("시간", StringComparison.Ordinal);
+        if (hourIndex >= 0)
+        {
+            var prefix = label[..hourIndex].Trim();
+            return string.IsNullOrEmpty(prefix) ? "H" : $"{prefix}H";
+        }
+
         var normalized = label
-            .Replace("시간", "h", StringComparison.Ordinal)
             .Replace("일", "d", StringComparison.Ordinal)
-            .Replace("개월", "mo", StringComparison.Ordinal)
-            .Replace("월간", "월", StringComparison.Ordinal);
+            .Replace("개월", "mo", StringComparison.Ordinal);
 
         return normalized.Length <= 4
             ? normalized

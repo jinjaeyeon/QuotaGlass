@@ -52,6 +52,24 @@
             </Style.Triggers>
         </Style>
 
+        <Style x:Key="CompactMeterTextStyle"
+               TargetType="TextBlock">
+            <Setter Property="Foreground"
+                    Value="#FFF7F8FA" />
+            <Setter Property="FontSize"
+                    Value="9" />
+            <Setter Property="FontWeight"
+                    Value="SemiBold" />
+            <Setter Property="Effect">
+                <Setter.Value>
+                    <DropShadowEffect BlurRadius="2"
+                                      Color="#FF000000"
+                                      Opacity="1"
+                                      ShadowDepth="0" />
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style x:Key="WidgetContextMenuStyle"
                TargetType="ContextMenu">
             <Setter Property="OverridesDefaultStyle" Value="True" />
@@ -145,7 +163,7 @@
 
     <Border x:Name="WidgetChrome"
             MinWidth="68"
-            Height="38"
+            Height="44"
             Padding="7,4"
             Background="{DynamicResource WidgetBrush}"
             BorderBrush="{DynamicResource BorderBrush}"
@@ -307,8 +325,8 @@
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
-                        <Grid Width="132"
-                              Height="28"
+                        <Grid Width="120"
+                              Height="34"
                               Margin="0,0,8,0"
                               ToolTip="{Binding CompactToolTip}">
                             <Grid.ColumnDefinitions>
@@ -371,21 +389,23 @@
                                           ItemsSource="{Binding CompactMeters}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Grid Height="13">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="32" />
-                                                <ColumnDefinition Width="*" />
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock VerticalAlignment="Center"
-                                                       Foreground="{DynamicResource MutedTextBrush}"
-                                                       FontSize="9"
-                                                       FontWeight="SemiBold"
-                                                       TextTrimming="CharacterEllipsis"
-                                                       Text="{Binding CompactLabel}" />
-                                            <ProgressBar Grid.Column="1"
+                                        <Grid Height="17">
+                                            <ProgressBar Height="15"
                                                          VerticalAlignment="Center"
                                                          Style="{StaticResource CompactUsageBarStyle}"
                                                          Value="{Binding RemainingRatio, Mode=OneWay}" />
+                                            <Grid Margin="6,0"
+                                                  IsHitTestVisible="False">
+                                                <TextBlock HorizontalAlignment="Left"
+                                                           VerticalAlignment="Center"
+                                                           Style="{StaticResource CompactMeterTextStyle}"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           Text="{Binding CompactLabel}" />
+                                                <TextBlock HorizontalAlignment="Right"
+                                                           VerticalAlignment="Center"
+                                                           Style="{StaticResource CompactMeterTextStyle}"
+                                                           Text="{Binding CompactRemainingText}" />
+                                            </Grid>
                                         </Grid>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
