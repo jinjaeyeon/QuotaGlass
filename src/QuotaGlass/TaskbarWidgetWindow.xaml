@@ -70,6 +70,13 @@
             </Setter>
         </Style>
 
+        <ItemsPanelTemplate x:Key="HorizontalWidgetProvidersPanel">
+            <StackPanel Orientation="Horizontal" />
+        </ItemsPanelTemplate>
+        <ItemsPanelTemplate x:Key="VerticalWidgetProvidersPanel">
+            <StackPanel Orientation="Vertical" />
+        </ItemsPanelTemplate>
+
         <Style x:Key="WidgetContextMenuStyle"
                TargetType="ContextMenu">
             <Setter Property="OverridesDefaultStyle" Value="True" />
@@ -227,6 +234,18 @@
                                    FontSize="12" />
                     </MenuItem.Icon>
                 </MenuItem>
+                <MenuItem x:Name="VerticalLayoutMenuItem"
+                          Header="그래프 세로로 배치"
+                          IsCheckable="True"
+                          StaysOpenOnClick="True"
+                          Click="VerticalLayoutMenuItem_Click">
+                    <MenuItem.Icon>
+                        <TextBlock x:Name="VerticalLayoutCheckGlyph"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   FontSize="12" />
+                    </MenuItem.Icon>
+                </MenuItem>
                 <MenuItem Header="위젯 위치 초기화"
                           Click="ResetPlacementMenuItem_Click">
                     <MenuItem.Icon>
@@ -305,7 +324,9 @@
             </ContextMenu>
         </Border.ContextMenu>
         <Grid>
-            <ItemsControl ItemsSource="{Binding WidgetProviders, ElementName=WidgetRoot}">
+            <ItemsControl x:Name="WidgetProvidersControl"
+                          ItemsSource="{Binding WidgetProviders, ElementName=WidgetRoot}"
+                          ItemsPanel="{StaticResource HorizontalWidgetProvidersPanel}">
                 <ItemsControl.Style>
                     <Style TargetType="ItemsControl">
                         <Setter Property="Visibility" Value="Visible" />
@@ -318,17 +339,24 @@
                         </Style.Triggers>
                     </Style>
                 </ItemsControl.Style>
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate>
-                        <StackPanel Orientation="Horizontal" />
-                    </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
                         <Grid Width="120"
                               Height="34"
-                              Margin="0,0,8,0"
                               ToolTip="{Binding CompactToolTip}">
+                            <Grid.Style>
+                                <Style TargetType="Grid">
+                                    <Setter Property="Margin"
+                                            Value="0,0,8,0" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsVerticalLayout, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                                                     Value="True">
+                                            <Setter Property="Margin"
+                                                    Value="0,0,0,5" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Grid.Style>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="28" />
                                 <ColumnDefinition Width="*" />

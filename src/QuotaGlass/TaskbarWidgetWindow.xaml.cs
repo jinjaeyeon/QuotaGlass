@@ -30,6 +30,7 @@ public partial class TaskbarWidgetWindow : Window
     private const uint SwpNoOwnerZOrder = 0x0200;
     private const uint GwHwndNext = 2;
     private const uint MonitorDefaultToNearest = 2;
+    private const double DefaultWidgetHeight = 44;
     private static readonly nint HwndTopmost = new(-1);
     private readonly Action _openFullWindow;
     private readonly Action _exitApplication;
@@ -44,6 +45,7 @@ public partial class TaskbarWidgetWindow : Window
     private NativeRect _dragBounds;
     private nint _lastTaskbar;
     private bool _freeMovementEnabled;
+    private bool _verticalLayoutEnabled;
     private TaskbarWidgetPlacementStore.ScreenPosition? _screenPosition;
     private bool _isPointerDown;
     private bool _isDragging;
@@ -54,6 +56,19 @@ public partial class TaskbarWidgetWindow : Window
     {
         get;
     } = [];
+
+    public static readonly DependencyProperty IsVerticalLayoutProperty =
+        DependencyProperty.Register(
+            nameof(IsVerticalLayout),
+            typeof(bool),
+            typeof(TaskbarWidgetWindow),
+            new PropertyMetadata(false));
+
+    public bool IsVerticalLayout
+    {
+        get => (bool)GetValue(IsVerticalLayoutProperty);
+        private set => SetValue(IsVerticalLayoutProperty, value);
+    }
 
     public TaskbarWidgetWindow(
         MainViewModel viewModel,
@@ -72,6 +87,8 @@ public partial class TaskbarWidgetWindow : Window
         _screenPosition = TaskbarWidgetPlacementStore.LoadScreenPosition();
         _freeMovementEnabled =
             TaskbarWidgetSettingsStore.LoadFreeMovementEnabled();
+        _verticalLayoutEnabled =
+            TaskbarWidgetSettingsStore.LoadVerticalLayoutEnabled();
         _positionTimer = new DispatcherTimer
         {
             Interval = TimeSpan.FromMilliseconds(500)
@@ -313,6 +330,7 @@ public partial class TaskbarWidgetWindow : Window
         StartOutsideClickMonitor();
         UpdateWindowsStartupMenuItem();
         UpdateFreeMovementMenuItem();
+        UpdateVerticalLayoutMenuItem();
         UpdateThemeMenuItems();
 
         for (var index = WidgetContextMenu.Items.Count - 1; index >= 0; index--)
@@ -452,6 +470,11 @@ public partial class TaskbarWidgetWindow : Window
         object sender,
         RoutedEventArgs e) =>
         SetFreeMovementEnabled(FreeMovementMenuItem.IsChecked);
+
+    private void VerticalLayoutMenuItem_Click(
+        object sender,
+        RoutedEventArgs e) =>
+        SetVerticalLayoutEnabled(VerticalLayoutMenuItem.IsChecked);
 
     private void StartWithWindowsMenuItem_Click(
         object sender,
@@ -845,6 +868,7 @@ public partial class TaskbarWidgetWindow : Window
 
         _freeMovementEnabled = enabled;
         TaskbarWidgetSettingsStore.SaveFreeMovementEnabled(enabled);
+        ApplyWidgetLayout();
         PositionWidget();
         if (enabled)
         {
@@ -860,6 +884,48 @@ public partial class TaskbarWidgetWindow : Window
         FreeMovementCheckGlyph.Text = _freeMovementEnabled
             ? "✓"
             : string.Empty;
+        UpdateVerticalLayoutMenuItem();
+    }
+
+    private void SetVerticalLayoutEnabled(bool enabled)
+    {
+        if (_verticalLayoutEnabled == enabled)
+        {
+            UpdateVerticalLayoutMenuItem();
+            return;
+        }
+
+        _verticalLayoutEnabled = enabled;
+        TaskbarWidgetSettingsStore.SaveVerticalLayoutEnabled(enabled);
+        ApplyWidgetLayout();
+        PositionWidget();
+        UpdateVerticalLayoutMenuItem();
+    }
+
+    private void UpdateVerticalLayoutMenuItem()
+    {
+        VerticalLayoutMenuItem.IsChecked = _verticalLayoutEnabled;
+        VerticalLayoutMenuItem.IsEnabled = _freeMovementEnabled;
+        VerticalLayoutCheckGlyph.Text = _verticalLayoutEnabled
+            ? "✓"
+            : string.Empty;
+    }
+
+    private void ApplyWidgetLayout()
+    {
+        var useVerticalLayout =
+            _freeMovementEnabled &&
+            _verticalLayoutEnabled &&
+            WidgetProviders.Count > 0;
+        WidgetProvidersControl.ItemsPanel =
+            (System.Windows.Controls.ItemsPanelTemplate)FindResource(
+                useVerticalLayout
+                    ? "VerticalWidgetProvidersPanel"
+                    : "HorizontalWidgetProvidersPanel");
+        IsVerticalLayout = useVerticalLayout;
+        WidgetChrome.Height = useVerticalLayout
+            ? double.NaN
+            : DefaultWidgetHeight;
     }
 
     private void SetTheme(AppThemeMode mode)
@@ -940,6 +1006,8 @@ public partial class TaskbarWidgetWindow : Window
                 WidgetProviders.Insert(index, expected[index]);
             }
         }
+
+        ApplyWidgetLayout();
     }
 
     protected override void OnClosed(EventArgs e)
