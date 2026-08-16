@@ -155,7 +155,7 @@
             MouseLeftButtonDown="WidgetChrome_MouseLeftButtonDown"
             MouseMove="WidgetChrome_MouseMove"
             MouseLeftButtonUp="WidgetChrome_MouseLeftButtonUp"
-            ToolTip="클릭: 전체 보기 · 드래그: 작업표시줄 안에서 이동">
+            ToolTip="클릭: 전체 보기 · 드래그: 설정에 따라 이동">
         <Border.ContextMenu>
             <ContextMenu x:Name="WidgetContextMenu"
                          Style="{StaticResource WidgetContextMenuStyle}"
@@ -197,6 +197,18 @@
                     </MenuItem.Icon>
                 </MenuItem>
                 <Separator />
+                <MenuItem x:Name="FreeMovementMenuItem"
+                          Header="화면 전체에서 자유롭게 이동"
+                          IsCheckable="True"
+                          StaysOpenOnClick="True"
+                          Click="FreeMovementMenuItem_Click">
+                    <MenuItem.Icon>
+                        <TextBlock x:Name="FreeMovementCheckGlyph"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   FontSize="12" />
+                    </MenuItem.Icon>
+                </MenuItem>
                 <MenuItem Header="위젯 위치 초기화"
                           Click="ResetPlacementMenuItem_Click">
                     <MenuItem.Icon>
