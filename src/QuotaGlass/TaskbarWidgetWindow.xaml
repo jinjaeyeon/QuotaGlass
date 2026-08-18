@@ -337,6 +337,19 @@
                                        FontSize="12" />
                         </MenuItem.Icon>
                     </MenuItem>
+                    <MenuItem x:Name="AntiAliasingMenuItem"
+                              Header="안티앨리어싱 사용"
+                              IsCheckable="False"
+                              StaysOpenOnClick="True"
+                              Click="AntiAliasingMenuItem_Click">
+                        <MenuItem.Icon>
+                            <TextBlock x:Name="AntiAliasingCheckGlyph"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       FontSize="11"
+                                       Text="" />
+                        </MenuItem.Icon>
+                    </MenuItem>
                 </MenuItem>
                 <Separator x:Name="UpdateMenuSeparator"
                            Visibility="Collapsed" />

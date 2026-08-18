@@ -5,6 +5,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
 using Microsoft.Win32;
+using QuotaGlass.Services;
 using QuotaGlass.ViewModels;
 using Forms = System.Windows.Forms;
 
@@ -25,6 +26,10 @@ public partial class MainWindow : Window
         Action restoreWidget)
     {
         InitializeComponent();
+
+        RenderingSettings.ApplyToVisualTree(
+            this,
+            TaskbarWidgetSettingsStore.LoadAntiAliasingEnabled());
 
         _dismissWindow = dismissWindow;
         _restoreWidget = restoreWidget;

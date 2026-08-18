@@ -12,6 +12,7 @@ using QuotaGlass.Services;
 using QuotaGlass.ViewModels;
 using Brushes = System.Windows.Media.Brushes;
 using WpfMenuItem = System.Windows.Controls.MenuItem;
+using WpfPopup = System.Windows.Controls.Primitives.Popup;
 using WpfTextBlock = System.Windows.Controls.TextBlock;
 
 namespace QuotaGlass;
@@ -54,6 +55,7 @@ public partial class TaskbarWidgetWindow : Window
     private bool _verticalLayoutEnabled;
     private int _widgetTransparencyPercent;
     private bool _widgetBackgroundEnabled;
+    private bool _antiAliasingEnabled;
     private TaskbarWidgetPlacementStore.ScreenPosition? _screenPosition;
     private TaskbarWidgetPlacementStore.MonitorPosition?
         _taskbarMonitorPosition;
@@ -115,6 +117,9 @@ public partial class TaskbarWidgetWindow : Window
                 MaxWidgetTransparencyPercent);
         _widgetBackgroundEnabled =
             TaskbarWidgetSettingsStore.LoadBackgroundEnabled();
+        _antiAliasingEnabled =
+            TaskbarWidgetSettingsStore.LoadAntiAliasingEnabled();
+        ApplyRenderingSettings();
         ApplyWidgetTransparency();
         ApplyWidgetBackground();
         _positionTimer = new DispatcherTimer
@@ -356,6 +361,19 @@ public partial class TaskbarWidgetWindow : Window
         RoutedEventArgs e) =>
         _viewModel.RefreshCommand.Execute(null);
 
+    private void AntiAliasingMenuItem_Click(
+        object sender,
+        RoutedEventArgs e) =>
+        SetAntiAliasingEnabled(!_antiAliasingEnabled);
+
+    private void SetAntiAliasingEnabled(bool enabled)
+    {
+        _antiAliasingEnabled = enabled;
+        TaskbarWidgetSettingsStore.SaveAntiAliasingEnabled(enabled);
+        UpdateAntiAliasingMenuItem();
+        ApplyRenderingSettings();
+    }
+
     private async void UpdateMenuItem_Click(
         object sender,
         RoutedEventArgs e)
@@ -393,11 +411,15 @@ public partial class TaskbarWidgetWindow : Window
         RoutedEventArgs e)
     {
         StartOutsideClickMonitor();
+        RenderingSettings.ApplyToVisualTree(
+            WidgetContextMenu,
+            _antiAliasingEnabled);
         UpdateWindowsStartupMenuItem();
         UpdateFreeMovementMenuItem();
         UpdateVerticalLayoutMenuItem();
         UpdateWidgetTransparencyMenuItems();
         UpdateWidgetBackgroundMenuItem();
+        UpdateAntiAliasingMenuItem();
         UpdateThemeMenuItems();
         UpdateAppUpdateMenuItem();
 
@@ -463,6 +485,14 @@ public partial class TaskbarWidgetWindow : Window
         object sender,
         RoutedEventArgs e) =>
         StopOutsideClickMonitor();
+
+    private void ApplyRenderingSettings()
+    {
+        RenderingSettings.ApplyToVisualTree(this, _antiAliasingEnabled);
+        RenderingSettings.ApplyToVisualTree(
+            WidgetContextMenu,
+            _antiAliasingEnabled);
+    }
 
     private void OnUpdateStateChanged(object? sender, EventArgs e)
     {
@@ -534,11 +564,60 @@ public partial class TaskbarWidgetWindow : Window
             return false;
         }
 
-        return point.X >= bounds.Left &&
-               point.X < bounds.Right &&
-               point.Y >= bounds.Top &&
-               point.Y < bounds.Bottom;
+        if (IsInsideBounds(point, bounds))
+        {
+            return true;
+        }
+
+        foreach (var menuItem in EnumerateMenuItems(WidgetContextMenu))
+        {
+            if (menuItem.Template.FindName("SubMenuPopup", menuItem)
+                    is not WpfPopup
+                    {
+                        IsOpen: true,
+                        Child: Visual child
+                    } ||
+                PresentationSource.FromVisual(child)
+                    is not HwndSource popupSource ||
+                !GetWindowRect(popupSource.Handle, out var popupBounds))
+            {
+                continue;
+            }
+
+            if (IsInsideBounds(point, popupBounds))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
+
+    private static IEnumerable<WpfMenuItem> EnumerateMenuItems(
+        System.Windows.Controls.ItemsControl itemsControl)
+    {
+        foreach (var item in itemsControl.Items)
+        {
+            if (item is not WpfMenuItem menuItem)
+            {
+                continue;
+            }
+
+            yield return menuItem;
+            foreach (var child in EnumerateMenuItems(menuItem))
+            {
+                yield return child;
+            }
+        }
+    }
+
+    private static bool IsInsideBounds(
+        NativePoint point,
+        NativeRect bounds) =>
+        point.X >= bounds.Left &&
+        point.X < bounds.Right &&
+        point.Y >= bounds.Top &&
+        point.Y < bounds.Bottom;
 
     private static bool IsMouseButtonDown(nint message) =>
         message == WmLeftButtonDown ||
@@ -1400,6 +1479,14 @@ public partial class TaskbarWidgetWindow : Window
     {
         WidgetBackgroundMenuItem.IsChecked = _widgetBackgroundEnabled;
         WidgetBackgroundCheckGlyph.Text = _widgetBackgroundEnabled
+            ? "✓"
+            : string.Empty;
+    }
+
+    private void UpdateAntiAliasingMenuItem()
+    {
+        AntiAliasingMenuItem.IsChecked = _antiAliasingEnabled;
+        AntiAliasingCheckGlyph.Text = _antiAliasingEnabled
             ? "✓"
             : string.Empty;
     }

@@ -25,6 +25,11 @@ internal static class TaskbarWidgetSettingsStore
             Environment.SpecialFolder.LocalApplicationData),
         "QuotaGlass",
         "taskbar-widget-background-enabled.txt");
+    private static readonly string AntiAliasingPath = Path.Combine(
+        Environment.GetFolderPath(
+            Environment.SpecialFolder.LocalApplicationData),
+        "QuotaGlass",
+        "taskbar-widget-anti-aliasing.txt");
 
     public static bool LoadFreeMovementEnabled()
     {
@@ -192,6 +197,44 @@ internal static class TaskbarWidgetSettingsStore
             }
 
             File.WriteAllText(settingsPath, enabled.ToString());
+        }
+        catch
+        {
+            // A read-only profile must not prevent the widget from working.
+        }
+    }
+
+    public static bool LoadAntiAliasingEnabled()
+    {
+        try
+        {
+            if (!File.Exists(AntiAliasingPath))
+            {
+                return true;
+            }
+
+            return !bool.TryParse(
+                       File.ReadAllText(AntiAliasingPath),
+                       out var enabled) ||
+                   enabled;
+        }
+        catch
+        {
+            return true;
+        }
+    }
+
+    public static void SaveAntiAliasingEnabled(bool enabled)
+    {
+        try
+        {
+            var directory = Path.GetDirectoryName(AntiAliasingPath);
+            if (!string.IsNullOrWhiteSpace(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            File.WriteAllText(AntiAliasingPath, enabled.ToString());
         }
         catch
         {
