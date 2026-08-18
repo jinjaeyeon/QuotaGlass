@@ -869,6 +869,9 @@ void RunTaskbarWidgetSettingsTests()
         Path.GetTempPath(),
         $"QuotaGlass.WidgetSettings.{Guid.NewGuid():N}");
     var settingsPath = Path.Combine(root, "widget-transparency.txt");
+    var backgroundSettingsPath = Path.Combine(
+        root,
+        "widget-background-enabled.txt");
 
     try
     {
@@ -876,6 +879,11 @@ void RunTaskbarWidgetSettingsTests()
             TaskbarWidgetSettingsStore.LoadTransparencyPercent(settingsPath) ==
             0,
             "위젯 투명도 기본값");
+
+        Require(
+            TaskbarWidgetSettingsStore.LoadBackgroundEnabled(
+                backgroundSettingsPath),
+            "위젯 배경 기본값");
 
         TaskbarWidgetSettingsStore.SaveTransparencyPercent(settingsPath, 50);
         Require(
@@ -894,6 +902,20 @@ void RunTaskbarWidgetSettingsTests()
             TaskbarWidgetSettingsStore.LoadTransparencyPercent(settingsPath) ==
             0,
             "위젯 투명도 하한 보정");
+
+        TaskbarWidgetSettingsStore.SaveBackgroundEnabled(
+            backgroundSettingsPath,
+            false);
+        Require(
+            !TaskbarWidgetSettingsStore.LoadBackgroundEnabled(
+                backgroundSettingsPath),
+            "위젯 배경 제거 상태 저장 및 복원");
+
+        File.WriteAllText(backgroundSettingsPath, "invalid");
+        Require(
+            TaskbarWidgetSettingsStore.LoadBackgroundEnabled(
+                backgroundSettingsPath),
+            "위젯 배경 설정 오류 시 기본값");
     }
     finally
     {

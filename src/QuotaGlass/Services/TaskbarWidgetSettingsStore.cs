@@ -20,6 +20,11 @@ internal static class TaskbarWidgetSettingsStore
             Environment.SpecialFolder.LocalApplicationData),
         "QuotaGlass",
         "taskbar-widget-transparency.txt");
+    private static readonly string BackgroundEnabledPath = Path.Combine(
+        Environment.GetFolderPath(
+            Environment.SpecialFolder.LocalApplicationData),
+        "QuotaGlass",
+        "taskbar-widget-background-enabled.txt");
 
     public static bool LoadFreeMovementEnabled()
     {
@@ -141,6 +146,52 @@ internal static class TaskbarWidgetSettingsStore
                 settingsPath,
                 Math.Clamp(transparencyPercent, 0, 100).ToString(
                     CultureInfo.InvariantCulture));
+        }
+        catch
+        {
+            // A read-only profile must not prevent the widget from working.
+        }
+    }
+
+    public static bool LoadBackgroundEnabled() =>
+        LoadBackgroundEnabled(BackgroundEnabledPath);
+
+    internal static bool LoadBackgroundEnabled(string settingsPath)
+    {
+        try
+        {
+            if (!File.Exists(settingsPath))
+            {
+                return true;
+            }
+
+            return !bool.TryParse(
+                       File.ReadAllText(settingsPath),
+                       out var enabled) ||
+                   enabled;
+        }
+        catch
+        {
+            return true;
+        }
+    }
+
+    public static void SaveBackgroundEnabled(bool enabled) =>
+        SaveBackgroundEnabled(BackgroundEnabledPath, enabled);
+
+    internal static void SaveBackgroundEnabled(
+        string settingsPath,
+        bool enabled)
+    {
+        try
+        {
+            var directory = Path.GetDirectoryName(settingsPath);
+            if (!string.IsNullOrWhiteSpace(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            File.WriteAllText(settingsPath, enabled.ToString());
         }
         catch
         {

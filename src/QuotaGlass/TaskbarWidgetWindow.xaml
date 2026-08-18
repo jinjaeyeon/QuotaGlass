@@ -284,6 +284,18 @@
                                    FontSize="12" />
                     </MenuItem.Icon>
                 </MenuItem>
+                <MenuItem x:Name="WidgetBackgroundMenuItem"
+                          Header="위젯 배경 표시"
+                          IsCheckable="True"
+                          StaysOpenOnClick="True"
+                          Click="WidgetBackgroundMenuItem_Click">
+                    <MenuItem.Icon>
+                        <TextBlock x:Name="WidgetBackgroundCheckGlyph"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   FontSize="12" />
+                    </MenuItem.Icon>
+                </MenuItem>
                 <Separator x:Name="UpdateMenuSeparator"
                            Visibility="Collapsed" />
                 <MenuItem x:Name="UpdateMenuItem"

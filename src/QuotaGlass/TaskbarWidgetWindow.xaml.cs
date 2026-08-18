@@ -9,6 +9,7 @@ using System.Windows.Threading;
 using Microsoft.Win32;
 using QuotaGlass.Services;
 using QuotaGlass.ViewModels;
+using Brushes = System.Windows.Media.Brushes;
 using WpfMenuItem = System.Windows.Controls.MenuItem;
 using WpfTextBlock = System.Windows.Controls.TextBlock;
 
@@ -50,6 +51,7 @@ public partial class TaskbarWidgetWindow : Window
     private bool _freeMovementEnabled;
     private bool _verticalLayoutEnabled;
     private int _widgetTransparencyPercent;
+    private bool _widgetBackgroundEnabled;
     private TaskbarWidgetPlacementStore.ScreenPosition? _screenPosition;
     private bool _isPointerDown;
     private bool _isDragging;
@@ -103,7 +105,10 @@ public partial class TaskbarWidgetWindow : Window
                 TaskbarWidgetSettingsStore.LoadTransparencyPercent(),
                 0,
                 MaxWidgetTransparencyPercent);
+        _widgetBackgroundEnabled =
+            TaskbarWidgetSettingsStore.LoadBackgroundEnabled();
         ApplyWidgetTransparency();
+        ApplyWidgetBackground();
         _positionTimer = new DispatcherTimer
         {
             Interval = TimeSpan.FromMilliseconds(500)
@@ -380,6 +385,7 @@ public partial class TaskbarWidgetWindow : Window
         UpdateFreeMovementMenuItem();
         UpdateVerticalLayoutMenuItem();
         UpdateWidgetTransparencyMenuItems();
+        UpdateWidgetBackgroundMenuItem();
         UpdateThemeMenuItems();
         UpdateAppUpdateMenuItem();
 
@@ -554,6 +560,11 @@ public partial class TaskbarWidgetWindow : Window
 
         SetWidgetTransparency(transparencyPercent);
     }
+
+    private void WidgetBackgroundMenuItem_Click(
+        object sender,
+        RoutedEventArgs e) =>
+        SetWidgetBackgroundEnabled(WidgetBackgroundMenuItem.IsChecked);
 
     private void StartWithWindowsMenuItem_Click(
         object sender,
@@ -1049,6 +1060,43 @@ public partial class TaskbarWidgetWindow : Window
 
     private void ApplyWidgetTransparency() =>
         Opacity = 1 - _widgetTransparencyPercent / 100d;
+
+    private void SetWidgetBackgroundEnabled(bool enabled)
+    {
+        _widgetBackgroundEnabled = enabled;
+        ApplyWidgetBackground();
+        TaskbarWidgetSettingsStore.SaveBackgroundEnabled(
+            _widgetBackgroundEnabled);
+        UpdateWidgetBackgroundMenuItem();
+    }
+
+    private void ApplyWidgetBackground()
+    {
+        if (_widgetBackgroundEnabled)
+        {
+            WidgetChrome.SetResourceReference(
+                System.Windows.Controls.Border.BackgroundProperty,
+                "WidgetBrush");
+            WidgetChrome.SetResourceReference(
+                System.Windows.Controls.Border.BorderBrushProperty,
+                "BorderBrush");
+        }
+        else
+        {
+            WidgetChrome.Background =
+                System.Windows.Media.Brushes.Transparent;
+            WidgetChrome.BorderBrush =
+                System.Windows.Media.Brushes.Transparent;
+        }
+    }
+
+    private void UpdateWidgetBackgroundMenuItem()
+    {
+        WidgetBackgroundMenuItem.IsChecked = _widgetBackgroundEnabled;
+        WidgetBackgroundCheckGlyph.Text = _widgetBackgroundEnabled
+            ? "✓"
+            : string.Empty;
+    }
 
     private void UpdateWidgetTransparencyMenuItems()
     {
