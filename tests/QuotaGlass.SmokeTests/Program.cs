@@ -940,6 +940,9 @@ void RunTaskbarWidgetSettingsTests()
     var backgroundSettingsPath = Path.Combine(
         root,
         "widget-background-enabled.txt");
+    var monitorSettingsPath = Path.Combine(
+        root,
+        "widget-monitor-position.txt");
 
     try
     {
@@ -984,6 +987,18 @@ void RunTaskbarWidgetSettingsTests()
             TaskbarWidgetSettingsStore.LoadBackgroundEnabled(
                 backgroundSettingsPath),
             "위젯 배경 설정 오류 시 기본값");
+
+        TaskbarWidgetPlacementStore.SaveTaskbarMonitorPosition(
+            monitorSettingsPath,
+            -1920,
+            120);
+        var monitorPosition =
+            TaskbarWidgetPlacementStore.LoadTaskbarMonitorPosition(
+                monitorSettingsPath);
+        Require(
+            monitorPosition is
+            { X: -1920, Y: 120 },
+            "위젯 작업표시줄 모니터 위치 저장 및 복원");
     }
     finally
     {

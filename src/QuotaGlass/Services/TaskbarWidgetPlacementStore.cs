@@ -15,8 +15,14 @@ internal static class TaskbarWidgetPlacementStore
             Environment.SpecialFolder.LocalApplicationData),
         "QuotaGlass",
         "taskbar-widget-screen-position.txt");
+    private static readonly string TaskbarMonitorSettingsPath = Path.Combine(
+        Environment.GetFolderPath(
+            Environment.SpecialFolder.LocalApplicationData),
+        "QuotaGlass",
+        "taskbar-widget-monitor-position.txt");
 
     internal readonly record struct ScreenPosition(int X, int Y);
+    internal readonly record struct MonitorPosition(int X, int Y);
 
     public static double? Load()
     {
@@ -117,6 +123,69 @@ internal static class TaskbarWidgetPlacementStore
         }
     }
 
+    public static MonitorPosition? LoadTaskbarMonitorPosition() =>
+        LoadTaskbarMonitorPosition(TaskbarMonitorSettingsPath);
+
+    internal static MonitorPosition? LoadTaskbarMonitorPosition(
+        string settingsPath)
+    {
+        try
+        {
+            if (!File.Exists(settingsPath))
+            {
+                return null;
+            }
+
+            var values = File.ReadAllLines(settingsPath);
+            return values.Length >= 2 &&
+                   int.TryParse(
+                       values[0],
+                       NumberStyles.Integer,
+                       CultureInfo.InvariantCulture,
+                       out var x) &&
+                   int.TryParse(
+                       values[1],
+                       NumberStyles.Integer,
+                       CultureInfo.InvariantCulture,
+                       out var y)
+                ? new MonitorPosition(x, y)
+                : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public static void SaveTaskbarMonitorPosition(int x, int y) =>
+        SaveTaskbarMonitorPosition(TaskbarMonitorSettingsPath, x, y);
+
+    internal static void SaveTaskbarMonitorPosition(
+        string settingsPath,
+        int x,
+        int y)
+    {
+        try
+        {
+            var directory = Path.GetDirectoryName(settingsPath);
+            if (!string.IsNullOrWhiteSpace(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            File.WriteAllLines(
+                settingsPath,
+                [
+                    x.ToString(CultureInfo.InvariantCulture),
+                    y.ToString(CultureInfo.InvariantCulture)
+                ]);
+        }
+        catch
+        {
+            // A read-only profile must not prevent the widget from working.
+        }
+    }
+
     public static void Reset()
     {
         try
@@ -129,6 +198,11 @@ internal static class TaskbarWidgetPlacementStore
             if (File.Exists(ScreenSettingsPath))
             {
                 File.Delete(ScreenSettingsPath);
+            }
+
+            if (File.Exists(TaskbarMonitorSettingsPath))
+            {
+                File.Delete(TaskbarMonitorSettingsPath);
             }
         }
         catch

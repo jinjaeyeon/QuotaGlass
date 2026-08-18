@@ -77,6 +77,10 @@ dotnet run --project .\src\QuotaGlass\QuotaGlass.csproj
 다시 펼쳐집니다. 이 상태는 앱을 재시작해도 유지됩니다. 트레이 아이콘의 툴팁과
 `사용량` 하위 메뉴에서도 현재 수치와 경고 상태를 확인할 수 있습니다.
 
+고정 모드에서 위젯을 다른 모니터로 끌면 Windows의 `모든 디스플레이에 작업표시줄
+표시` 옵션이 켜진 경우 해당 모니터의 작업표시줄로 이동하며, 옵션이 꺼져 있으면
+메인 모니터의 작업표시줄에 남습니다.
+
 ## 실제 수집기 추가
 
 `IUsageProvider.FetchAsync`를 구현한 다음 `MainViewModel`의 provider 목록에

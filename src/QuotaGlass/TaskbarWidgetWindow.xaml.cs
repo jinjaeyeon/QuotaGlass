@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Input;
@@ -47,12 +48,15 @@ public partial class TaskbarWidgetWindow : Window
     private NativePoint _dragStartCursor;
     private NativeRect _dragStartWindow;
     private NativeRect _dragBounds;
+    private nint _dragTaskbar;
     private nint _lastTaskbar;
     private bool _freeMovementEnabled;
     private bool _verticalLayoutEnabled;
     private int _widgetTransparencyPercent;
     private bool _widgetBackgroundEnabled;
     private TaskbarWidgetPlacementStore.ScreenPosition? _screenPosition;
+    private TaskbarWidgetPlacementStore.MonitorPosition?
+        _taskbarMonitorPosition;
     private bool _isPointerDown;
     private bool _isDragging;
     private bool _isHiddenAutomatically;
@@ -96,6 +100,8 @@ public partial class TaskbarWidgetWindow : Window
         _selectedProviderIds = TaskbarWidgetProviderStore.LoadOrDefault();
         _positionRatio = TaskbarWidgetPlacementStore.Load();
         _screenPosition = TaskbarWidgetPlacementStore.LoadScreenPosition();
+        _taskbarMonitorPosition =
+            TaskbarWidgetPlacementStore.LoadTaskbarMonitorPosition();
         _freeMovementEnabled =
             TaskbarWidgetSettingsStore.LoadFreeMovementEnabled();
         _verticalLayoutEnabled =
@@ -139,6 +145,7 @@ public partial class TaskbarWidgetWindow : Window
     {
         _positionRatio = null;
         _screenPosition = null;
+        _taskbarMonitorPosition = null;
         TaskbarWidgetPlacementStore.Reset();
         PositionWidget();
     }
@@ -208,7 +215,7 @@ public partial class TaskbarWidgetWindow : Window
         }
 
         var handle = new WindowInteropHelper(this).Handle;
-        var taskbar = FindWindow("Shell_TrayWnd", null);
+        var taskbar = GetTaskbarForCurrentWidget();
         var isTaskbarHidden = taskbar != nint.Zero &&
                               !TaskbarVisibilityDetector.IsShown(taskbar);
         var shouldHide = !_freeMovementEnabled &&
@@ -245,7 +252,7 @@ public partial class TaskbarWidgetWindow : Window
         }
 
         var widget = new WindowInteropHelper(this).Handle;
-        var taskbar = FindWindow("Shell_TrayWnd", null);
+        var taskbar = GetTaskbarForCurrentWidget();
         if (widget == nint.Zero ||
             taskbar == nint.Zero ||
             !IsWindowAbove(taskbar, widget))
@@ -320,12 +327,15 @@ public partial class TaskbarWidgetWindow : Window
         }
         else
         {
-            var taskbar = FindWindow("Shell_TrayWnd", null);
-            if (taskbar == nint.Zero ||
-                !GetWindowRect(taskbar, out _dragBounds))
+            if (!TryGetTaskbarForPoint(
+                    _dragStartCursor,
+                    out var taskbar) ||
+                !GetWindowRect(taskbar.Handle, out _dragBounds))
             {
                 return;
             }
+
+            _dragTaskbar = taskbar.Handle;
         }
 
         _isPointerDown = true;
@@ -646,18 +656,43 @@ public partial class TaskbarWidgetWindow : Window
         }
         else
         {
-            var innerLeft = _dragBounds.Left + 8;
-            var innerRight = Math.Max(
-                innerLeft,
-                _dragBounds.Right - width - 8);
-            x = Math.Clamp(
-                _dragStartWindow.Left + deltaX,
-                innerLeft,
-                innerRight);
-            y = _dragBounds.Top +
-                Math.Max(
-                    1,
-                    ((_dragBounds.Bottom - _dragBounds.Top) - height) / 2);
+            if (!TryGetTaskbarForPoint(cursor, out var taskbar))
+            {
+                return;
+            }
+
+            _dragTaskbar = taskbar.Handle;
+            _dragBounds = taskbar.Bounds;
+            var taskbarWidth = _dragBounds.Right - _dragBounds.Left;
+            var taskbarHeight = _dragBounds.Bottom - _dragBounds.Top;
+            if (taskbarWidth >= taskbarHeight)
+            {
+                var innerLeft = _dragBounds.Left + 8;
+                var innerRight = Math.Max(
+                    innerLeft,
+                    _dragBounds.Right - width - 8);
+                x = Math.Clamp(
+                    _dragStartWindow.Left + deltaX,
+                    innerLeft,
+                    innerRight);
+                y = _dragBounds.Top +
+                    Math.Max(
+                        1,
+                        (taskbarHeight - height) / 2);
+            }
+            else
+            {
+                var innerTop = _dragBounds.Top + 8;
+                var innerBottom = Math.Max(
+                    innerTop,
+                    _dragBounds.Bottom - height - 8);
+                x = _dragBounds.Left +
+                    Math.Max(1, (taskbarWidth - width) / 2);
+                y = Math.Clamp(
+                    _dragStartWindow.Top + deltaY,
+                    innerTop,
+                    innerBottom);
+            }
         }
 
         SetWindowPos(
@@ -788,9 +823,8 @@ public partial class TaskbarWidgetWindow : Window
             return;
         }
 
-        var taskbar = FindWindow("Shell_TrayWnd", null);
-        if (taskbar == nint.Zero ||
-            !GetWindowRect(taskbar, out var taskbarRect))
+        if (!TryGetTaskbarForSavedMonitor(out var taskbar) ||
+            !GetWindowRect(taskbar.Handle, out var taskbarRect))
         {
             return;
         }
@@ -811,7 +845,11 @@ public partial class TaskbarWidgetWindow : Window
 
         if (isHorizontal)
         {
-            var tray = FindWindowEx(taskbar, nint.Zero, "TrayNotifyWnd", null);
+            var tray = FindWindowEx(
+                taskbar.Handle,
+                nint.Zero,
+                "TrayNotifyWnd",
+                null);
             NativeRect trayRect = default;
             var hasTrayRect = tray != nint.Zero &&
                               GetWindowRect(tray, out trayRect);
@@ -837,13 +875,20 @@ public partial class TaskbarWidgetWindow : Window
         {
             x = taskbarRect.Left +
                 Math.Max(1, (taskbarWidth - width) / 2);
-            y = Math.Max(
-                taskbarRect.Top + 8,
-                taskbarRect.Bottom - height - 150);
+            var innerTop = taskbarRect.Top + 8;
+            var innerBottom = Math.Max(
+                innerTop,
+                taskbarRect.Bottom - height - 8);
+            y = _positionRatio is { } position
+                ? innerTop +
+                  (int)Math.Round((innerBottom - innerTop) * position)
+                : Math.Max(
+                    taskbarRect.Top + 8,
+                    taskbarRect.Bottom - height - 150);
         }
 
         var handle = new WindowInteropHelper(this).Handle;
-        if (_lastTaskbar == taskbar &&
+        if (_lastTaskbar == taskbar.Handle &&
             GetWindowRect(handle, out var currentRect) &&
             Math.Abs(currentRect.Left - x) <= 1 &&
             Math.Abs(currentRect.Top - y) <= 1 &&
@@ -861,7 +906,7 @@ public partial class TaskbarWidgetWindow : Window
             width,
             height,
             SwpNoActivate);
-        _lastTaskbar = taskbar;
+        _lastTaskbar = taskbar.Handle;
     }
 
     private void SaveCurrentPosition()
@@ -884,18 +929,276 @@ public partial class TaskbarWidgetWindow : Window
         }
 
         var width = windowRect.Right - windowRect.Left;
-        var innerLeft = _dragBounds.Left + 8;
-        var innerRight = Math.Max(
-            innerLeft,
-            _dragBounds.Right - width - 8);
-        var range = innerRight - innerLeft;
-        _positionRatio = range <= 0
-            ? 0
-            : Math.Clamp(
-                (windowRect.Left - innerLeft) / (double)range,
-                0,
-                1);
+        var height = windowRect.Bottom - windowRect.Top;
+        var taskbar = TryGetTaskbar(_dragTaskbar, out var draggedTaskbar)
+            ? draggedTaskbar
+            : new TaskbarInfo(_dragTaskbar, _dragBounds, default);
+        var taskbarWidth = _dragBounds.Right - _dragBounds.Left;
+        var taskbarHeight = _dragBounds.Bottom - _dragBounds.Top;
+        if (taskbarWidth >= taskbarHeight)
+        {
+            var innerLeft = _dragBounds.Left + 8;
+            var innerRight = Math.Max(
+                innerLeft,
+                _dragBounds.Right - width - 8);
+            var range = innerRight - innerLeft;
+            _positionRatio = range <= 0
+                ? 0
+                : Math.Clamp(
+                    (windowRect.Left - innerLeft) / (double)range,
+                    0,
+                    1);
+        }
+        else
+        {
+            var innerTop = _dragBounds.Top + 8;
+            var innerBottom = Math.Max(
+                innerTop,
+                _dragBounds.Bottom - height - 8);
+            var range = innerBottom - innerTop;
+            _positionRatio = range <= 0
+                ? 0
+                : Math.Clamp(
+                    (windowRect.Top - innerTop) / (double)range,
+                    0,
+                    1);
+        }
+
+        if (taskbar.Monitor.Left != 0 ||
+            taskbar.Monitor.Top != 0 ||
+            taskbar.Monitor.Right != 0 ||
+            taskbar.Monitor.Bottom != 0)
+        {
+            _taskbarMonitorPosition =
+                new TaskbarWidgetPlacementStore.MonitorPosition(
+                    taskbar.Monitor.Left,
+                    taskbar.Monitor.Top);
+            TaskbarWidgetPlacementStore.SaveTaskbarMonitorPosition(
+                taskbar.Monitor.Left,
+                taskbar.Monitor.Top);
+        }
+
         TaskbarWidgetPlacementStore.Save(_positionRatio.Value);
+    }
+
+    private nint GetTaskbarForCurrentWidget()
+    {
+        var handle = new WindowInteropHelper(this).Handle;
+        if (GetWindowRect(handle, out var windowRect))
+        {
+            var point = new NativePoint
+            {
+                X = windowRect.Left +
+                    (windowRect.Right - windowRect.Left) / 2,
+                Y = windowRect.Top +
+                    (windowRect.Bottom - windowRect.Top) / 2
+            };
+            if (TryGetTaskbarForPoint(point, out var taskbar))
+            {
+                return taskbar.Handle;
+            }
+        }
+
+        return FindWindow("Shell_TrayWnd", null);
+    }
+
+    private bool TryGetTaskbarForSavedMonitor(out TaskbarInfo taskbar)
+    {
+        var savedMonitor = _taskbarMonitorPosition;
+        if (savedMonitor is { } saved)
+        {
+            foreach (var candidate in EnumerateTaskbars())
+            {
+                if (candidate.Monitor.Left == saved.X &&
+                    candidate.Monitor.Top == saved.Y)
+                {
+                    taskbar = candidate;
+                    return true;
+                }
+            }
+        }
+
+        var mainTaskbar = FindWindow("Shell_TrayWnd", null);
+        if (TryGetTaskbar(mainTaskbar, out taskbar))
+        {
+            if (savedMonitor is not null &&
+                (taskbar.Monitor.Left != savedMonitor.Value.X ||
+                 taskbar.Monitor.Top != savedMonitor.Value.Y))
+            {
+                RememberTaskbarMonitor(taskbar);
+            }
+
+            return true;
+        }
+
+        foreach (var candidate in EnumerateTaskbars())
+        {
+            taskbar = candidate;
+            return true;
+        }
+
+        taskbar = default;
+        return false;
+    }
+
+    private static bool TryGetTaskbarForPoint(
+        NativePoint point,
+        out TaskbarInfo taskbar)
+    {
+        var monitor = MonitorFromPoint(point, MonitorDefaultToNearest);
+        if (monitor != nint.Zero)
+        {
+            foreach (var candidate in EnumerateTaskbars())
+            {
+                if (MonitorFromWindow(
+                        candidate.Handle,
+                        MonitorDefaultToNearest) == monitor)
+                {
+                    taskbar = candidate;
+                    return true;
+                }
+            }
+        }
+
+        var mainTaskbar = FindWindow("Shell_TrayWnd", null);
+        if (TryGetTaskbar(mainTaskbar, out taskbar))
+        {
+            return true;
+        }
+
+        taskbar = default;
+        return false;
+    }
+
+    private static IEnumerable<TaskbarInfo> EnumerateTaskbars()
+    {
+        var mainTaskbar = FindWindow("Shell_TrayWnd", null);
+        if (TryGetTaskbar(mainTaskbar, out var main))
+        {
+            yield return main;
+        }
+
+        if (!AreSecondaryTaskbarsEnabled())
+        {
+            yield break;
+        }
+
+        var secondaryHandles = new List<nint>();
+        EnumWindows(
+            (window, _) =>
+            {
+                var className = new StringBuilder(64);
+                if (GetClassName(window, className, className.Capacity) > 0 &&
+                    string.Equals(
+                        className.ToString(),
+                        "Shell_SecondaryTrayWnd",
+                        StringComparison.Ordinal))
+                {
+                    secondaryHandles.Add(window);
+                }
+
+                return true;
+            },
+            nint.Zero);
+
+        foreach (var handle in secondaryHandles)
+        {
+            if (handle != mainTaskbar && TryGetTaskbar(handle, out var secondary))
+            {
+                yield return secondary;
+            }
+        }
+    }
+
+    private static bool AreSecondaryTaskbarsEnabled()
+    {
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(
+                @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced");
+            var value = key?.GetValue("MMTaskbarEnabled");
+            if (value is not null)
+            {
+                return value switch
+                {
+                    int integer => integer != 0,
+                    long longValue => longValue != 0,
+                    _ => true
+                };
+            }
+        }
+        catch
+        {
+            // The taskbar window presence below is the fallback source of truth.
+        }
+
+        return HasSecondaryTaskbarWindow();
+    }
+
+    private static bool HasSecondaryTaskbarWindow()
+    {
+        var found = false;
+        EnumWindows(
+            (window, _) =>
+            {
+                var className = new StringBuilder(64);
+                if (GetClassName(window, className, className.Capacity) > 0 &&
+                    string.Equals(
+                        className.ToString(),
+                        "Shell_SecondaryTrayWnd",
+                        StringComparison.Ordinal))
+                {
+                    found = true;
+                    return false;
+                }
+
+                return true;
+            },
+            nint.Zero);
+        return found;
+    }
+
+    private static bool TryGetTaskbar(
+        nint handle,
+        out TaskbarInfo taskbar)
+    {
+        if (handle == nint.Zero ||
+            !GetWindowRect(handle, out var bounds))
+        {
+            taskbar = default;
+            return false;
+        }
+
+        var monitor = MonitorFromWindow(handle, MonitorDefaultToNearest);
+        if (monitor == nint.Zero)
+        {
+            taskbar = default;
+            return false;
+        }
+
+        var monitorInfo = new MonitorInfo
+        {
+            Size = Marshal.SizeOf<MonitorInfo>()
+        };
+        if (!GetMonitorInfo(monitor, ref monitorInfo))
+        {
+            taskbar = default;
+            return false;
+        }
+
+        taskbar = new TaskbarInfo(handle, bounds, monitorInfo.Monitor);
+        return true;
+    }
+
+    private void RememberTaskbarMonitor(TaskbarInfo taskbar)
+    {
+        _taskbarMonitorPosition =
+            new TaskbarWidgetPlacementStore.MonitorPosition(
+                taskbar.Monitor.Left,
+                taskbar.Monitor.Top);
+        TaskbarWidgetPlacementStore.SaveTaskbarMonitorPosition(
+            taskbar.Monitor.Left,
+            taskbar.Monitor.Top);
     }
 
     private static bool GetMonitorBoundsForPoint(
@@ -1241,9 +1544,18 @@ public partial class TaskbarWidgetWindow : Window
 
     private sealed record ProviderMenuTag(string ProviderId);
 
+    private readonly record struct TaskbarInfo(
+        nint Handle,
+        NativeRect Bounds,
+        NativeRect Monitor);
+
     private delegate nint LowLevelMouseProc(
         int code,
         nint message,
+        nint data);
+
+    private delegate bool EnumWindowsProc(
+        nint window,
         nint data);
 
     [DllImport("user32.dll", SetLastError = true)]
@@ -1293,6 +1605,23 @@ public partial class TaskbarWidgetWindow : Window
     private static extern nint MonitorFromPoint(
         NativePoint point,
         uint flags);
+
+    [DllImport("user32.dll")]
+    private static extern nint MonitorFromWindow(
+        nint window,
+        uint flags);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool EnumWindows(
+        EnumWindowsProc callback,
+        nint data);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetClassName(
+        nint window,
+        StringBuilder className,
+        int maxCount);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     [return: MarshalAs(UnmanagedType.Bool)]
