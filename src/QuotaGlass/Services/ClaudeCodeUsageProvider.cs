@@ -6,8 +6,7 @@ using QuotaGlass.Models;
 
 namespace QuotaGlass.Services;
 
-public sealed class ClaudeCodeUsageProvider(
-    AgentInstallation installation) : IUsageProvider
+public sealed class ClaudeCodeUsageProvider : IUsageProvider
 {
     private static readonly TimeSpan UsageStartupTimeout =
         TimeSpan.FromSeconds(10);
@@ -17,6 +16,22 @@ public sealed class ClaudeCodeUsageProvider(
         TimeSpan.FromSeconds(15);
     private static readonly TimeSpan StatusLineCacheMaxAge =
         TimeSpan.FromMinutes(10);
+
+    private readonly AgentInstallation installation;
+    private readonly ClaudeUsageApiClient usageApiClient;
+
+    public ClaudeCodeUsageProvider(AgentInstallation installation)
+        : this(installation, new ClaudeUsageApiClient())
+    {
+    }
+
+    internal ClaudeCodeUsageProvider(
+        AgentInstallation installation,
+        ClaudeUsageApiClient usageApiClient)
+    {
+        this.installation = installation;
+        this.usageApiClient = usageApiClient;
+    }
 
     public string ProviderId => installation.ProviderId;
     public string DisplayName => installation.DisplayName;
@@ -39,29 +54,26 @@ public sealed class ClaudeCodeUsageProvider(
         var now = DateTimeOffset.Now;
         IReadOnlyList<UsageMeter> cachedMeters = [];
         string? cachedWorkingDirectory = null;
+        var cacheObservedAt = DateTimeOffset.MinValue;
         var isStatusLineCacheFresh = false;
         if (File.Exists(sidecar))
         {
             var json = await File.ReadAllTextAsync(sidecar, cancellationToken);
-            cachedMeters = ClaudeRateLimitParser.Parse(json);
+            try
+            {
+                cachedMeters = ClaudeRateLimitParser.Parse(json);
+            }
+            catch (JsonException)
+            {
+                // A partial/old sidecar must not prevent the direct API path.
+                cachedMeters = [];
+            }
+
             cachedWorkingDirectory = ReadCachedWorkingDirectory(json);
-            var cacheObservedAt = File.GetLastWriteTimeUtc(sidecar);
+            cacheObservedAt = File.GetLastWriteTimeUtc(sidecar);
             isStatusLineCacheFresh = IsStatusLineCacheFresh(
                 cacheObservedAt,
                 now);
-            if (isStatusLineCacheFresh &&
-                cachedMeters.Count > 0 &&
-                cachedMeters.All(meter => meter.ResetsAt > now))
-            {
-                return new UsageSnapshot(
-                    ProviderId,
-                    DisplayName,
-                    IconText,
-                    "구독 · 5시간/주간 · status line",
-                    cachedMeters,
-                    cacheObservedAt,
-                    "Claude Code status-line cache");
-            }
         }
 
         var startInfo = new ProcessStartInfo
@@ -123,6 +135,35 @@ public sealed class ClaudeCodeUsageProvider(
 
         if (isSubscription)
         {
+            var apiMeters = await usageApiClient.FetchAsync(
+                installation.Version,
+                cancellationToken);
+            if (apiMeters.Count > 0)
+            {
+                return new UsageSnapshot(
+                    ProviderId,
+                    DisplayName,
+                    IconText,
+                    accountLabel,
+                    apiMeters,
+                    DateTimeOffset.Now,
+                    "Claude Code usage API");
+            }
+
+            if (isStatusLineCacheFresh &&
+                cachedMeters.Count > 0 &&
+                cachedMeters.All(meter => meter.ResetsAt > now))
+            {
+                return new UsageSnapshot(
+                    ProviderId,
+                    DisplayName,
+                    IconText,
+                    accountLabel,
+                    cachedMeters,
+                    cacheObservedAt,
+                    "Claude Code status-line cache");
+            }
+
             var usageOutput = await ReadUsageScreenAsync(
                 installation.ExecutablePath,
                 cachedWorkingDirectory,

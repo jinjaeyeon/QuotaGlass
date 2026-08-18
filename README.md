@@ -14,9 +14,10 @@ CLI가 나중에 설치되면 시스템 CLI를 우선 사용합니다.
 rate-limit 데이터와 남은 리셋 티켓 개수, 가장 이른 티켓 기한을 읽습니다.
 JetBrains AI는 IDE의 로컬 quota 상태에서 월간
 AI Credits와 다음 refill 시각을 읽습니다. Claude Code는 `auth status`로 구독
-로그인을 확인하고 Team 계정은 headless `/usage` 화면에서 5시간·주간 사용량을
-읽습니다. Pro/Max 계정은 공식 status-line JSON의 `rate_limits.five_hour`와
-`rate_limits.seven_day`도 지원합니다. 기존 status line은 브리지 뒤에 그대로
+로그인을 확인한 뒤, Claude Code의 OAuth 사용량 endpoint에서 5시간·주간 사용량을
+직접 읽습니다. API가 일시적으로 실패하면 status-line JSON 캐시와 headless `/usage` 화면을
+순서대로 fallback으로 사용합니다. Pro/Max 계정의 공식 status-line JSON인
+`rate_limits.five_hour`와 `rate_limits.seven_day`도 계속 지원하며, 기존 status line은 브리지 뒤에 그대로
 연결됩니다. 브리지는 별도 PowerShell 콘솔을 만들지 않고 QuotaGlass 실행 파일의
 숨김 명령 모드에서 동작합니다. Antigravity는 공식 `agy` CLI가 자체 인증으로 제공하는 로컬
 `RetrieveUserQuotaSummary` RPC를 통해 Gemini 및 Claude/GPT 모델 그룹의

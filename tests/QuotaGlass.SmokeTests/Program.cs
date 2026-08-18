@@ -1,5 +1,8 @@
 using System.IO;
 using System.IO.Compression;
+using System.Net;
+using System.Net.Http;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using QuotaGlass.Models;
@@ -291,6 +294,32 @@ const string claudeStatusLineFixture =
     }
     """;
 var claudeMeters = ClaudeRateLimitParser.Parse(claudeStatusLineFixture);
+var claudeUsageApiFixture =
+    $$"""
+    {
+      "five_hour": {
+        "utilization": 23.5,
+        "resets_at": "{{now.AddHours(4):O}}"
+      },
+      "seven_day": {
+        "utilization": 41.2,
+        "resets_at": "{{now.AddDays(3):O}}"
+      }
+    }
+    """;
+var claudeApiMeters = ClaudeRateLimitParser.Parse(claudeUsageApiFixture);
+Require(claudeApiMeters.Count == 2, "Claude usage API meter 개수");
+Require(
+    Approximately(
+        claudeApiMeters.Single(item => item.Label == "5시간").RemainingRatio,
+        0.765),
+    "Claude usage API 5시간 잔량");
+Require(
+    Approximately(
+        claudeApiMeters.Single(item => item.Label == "주간").RemainingRatio,
+        0.588),
+    "Claude usage API 주간 잔량");
+await RunClaudeUsageApiClientTests();
 var cachedWorkingDirectoryFixture = System.Text.Json.JsonSerializer.Serialize(
     new { cwd = Environment.CurrentDirectory });
 Require(
@@ -471,6 +500,17 @@ if (args.Contains("--integration", StringComparer.Ordinal))
                 : $" · {snapshot.StatusMessage}"));
     }
 
+    var actualClaude = actualSnapshots.Single(snapshot =>
+        snapshot.Provider == "claude-code");
+    Require(
+        actualClaude.State == UsageSnapshotState.Available &&
+        actualClaude.Meters.Count == 2,
+        "Claude Team 실제 사용량");
+    Require(
+        actualClaude.Meters.Select(meter => meter.Label).Distinct().Count() ==
+        actualClaude.Meters.Count,
+        "Claude 5시간/주간 제한 중복 없음");
+
     var actualCodex = actualSnapshots.Single(snapshot =>
         snapshot.Provider == "codex");
     Require(
@@ -488,17 +528,6 @@ if (args.Contains("--integration", StringComparer.Ordinal))
     Require(
         actualJetBrains.Meters.Any(meter => meter.Unit == "credits"),
         "JetBrains AI credits meter");
-
-    var actualClaude = actualSnapshots.Single(snapshot =>
-        snapshot.Provider == "claude-code");
-    Require(
-        actualClaude.State == UsageSnapshotState.Available &&
-        actualClaude.Meters.Count == 2,
-        "Claude Team /usage 실제 사용량");
-    Require(
-        actualClaude.Meters.Select(meter => meter.Label).Distinct().Count() ==
-        actualClaude.Meters.Count,
-        "Claude status-line과 /usage 제한 중복 없음");
 
     var actualAntigravity = actualSnapshots.Single(snapshot =>
         snapshot.Provider == "antigravity");
@@ -1121,4 +1150,121 @@ static void Require(bool condition, string label)
     {
         throw new InvalidOperationException($"실패: {label}");
     }
+}
+
+static async Task RunClaudeUsageApiClientTests()
+{
+    var root = Path.Combine(
+        Path.GetTempPath(),
+        $"QuotaGlass.ClaudeApi.{Guid.NewGuid():N}");
+    var credentialsPath = Path.Combine(root, ".claude", ".credentials.json");
+    Directory.CreateDirectory(Path.GetDirectoryName(credentialsPath)!);
+    var requestUris = new List<string>();
+    var handler = new StubHttpMessageHandler(request =>
+    {
+        requestUris.Add(request.RequestUri?.AbsoluteUri ?? string.Empty);
+        if (request.Method == HttpMethod.Post)
+        {
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """
+                    {
+                      "access_token": "refreshed-access-token",
+                      "refresh_token": "rotated-refresh-token",
+                      "expires_in": 3600,
+                      "refresh_token_expires_in": 86400
+                    }
+                    """,
+                    Encoding.UTF8,
+                    "application/json")
+            };
+        }
+
+        var authorization = request.Headers.Authorization;
+        Require(
+            authorization?.Scheme == "Bearer" &&
+            authorization.Parameter == "refreshed-access-token",
+            "Claude usage API refresh token 사용");
+        Require(
+            request.Headers.TryGetValues("anthropic-beta", out var betaHeaders) &&
+            betaHeaders.Single() == "oauth-2025-04-20" &&
+            request.Headers.UserAgent.ToString().StartsWith(
+                "claude-code/2.1.229",
+                StringComparison.Ordinal),
+            "Claude usage API CLI 호환 헤더");
+        return new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                """
+                {
+                  "five_hour": {
+                    "utilization": 12.5,
+                    "resets_at": "2026-08-18T16:00:00+09:00"
+                  },
+                  "seven_day": {
+                    "utilization": 34.5,
+                    "resets_at": "2026-08-21T12:00:00+09:00"
+                  }
+                }
+                """,
+                Encoding.UTF8,
+                "application/json")
+        };
+    });
+
+    try
+    {
+        File.WriteAllText(
+            credentialsPath,
+            """
+            {
+              "claudeAiOauth": {
+                "accessToken": "expired-access-token",
+                "refreshToken": "refresh-token",
+                "expiresAt": 1,
+                "refreshTokenExpiresAt": 4102444800000
+              }
+            }
+            """);
+        using var client = new HttpClient(handler);
+        var apiClient = new ClaudeUsageApiClient(client, credentialsPath);
+        var meters = await apiClient.FetchAsync(
+            "2.1.229",
+            CancellationToken.None);
+        Require(
+            requestUris.Count == 2 &&
+            requestUris[0].EndsWith(
+                "/v1/oauth/token",
+                StringComparison.Ordinal) &&
+            requestUris[1].EndsWith(
+                "/api/oauth/usage",
+                StringComparison.Ordinal),
+            "Claude usage API OAuth refresh 후 usage 호출");
+        Require(meters.Count == 2, "Claude usage API refresh 응답 meter 개수");
+        var savedCredentials = JsonNode.Parse(
+            File.ReadAllText(credentialsPath))!;
+        Require(
+            savedCredentials["claudeAiOauth"]?["accessToken"]?.GetValue<string>() ==
+            "refreshed-access-token" &&
+            savedCredentials["claudeAiOauth"]?["refreshToken"]?.GetValue<string>() ==
+            "rotated-refresh-token",
+            "Claude OAuth credential 회전 토큰 저장");
+    }
+    finally
+    {
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+}
+
+sealed class StubHttpMessageHandler(
+    Func<HttpRequestMessage, HttpResponseMessage> handler) : HttpMessageHandler
+{
+    protected override Task<HttpResponseMessage> SendAsync(
+        HttpRequestMessage request,
+        CancellationToken cancellationToken) =>
+        Task.FromResult(handler(request));
 }
