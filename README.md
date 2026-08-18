@@ -33,6 +33,10 @@ Copilot은 열린 터미널에서 `/login`을 입력해야 합니다. Cursor는 
 JetBrains AI는 독립 CLI가 없어 설치된 IDE 플러그인의 quota 캐시를 계속
 사용합니다.
 
+릴리즈로 설치한 `QuotaGlass.exe`는 시작 시와 이후 6시간마다 GitHub Releases를
+확인합니다. 새 버전이 있으면 위젯 컨텍스트 메뉴에 업데이트 항목이 나타나며,
+선택하면 exe와 SHA-256을 확인한 뒤 앱을 자동으로 교체하고 재시작합니다.
+
 제한 구간은 서비스에 고정하지 않습니다. Codex 어댑터는 현재 계정이 반환한
 primary/secondary window를 meter로 변환합니다. 따라서 개인 계정의
 `5시간 + 주간`과 팀 계정의 `월간` 제한을 같은 모델로 처리합니다.

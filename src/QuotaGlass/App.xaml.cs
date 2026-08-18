@@ -14,6 +14,7 @@ public partial class App : System.Windows.Application
     private TaskbarWidgetWindow? _taskbarWidget;
     private MainViewModel? _viewModel;
     private ThemeService? _themeService;
+    private AppUpdateService? _updateService;
     private Mutex? _singleInstanceMutex;
     private bool _ownsSingleInstanceMutex;
     private int _exitStarted;
@@ -61,13 +62,17 @@ public partial class App : System.Windows.Application
 
         _themeService = new ThemeService(this);
         _viewModel = new MainViewModel();
+        _updateService = new AppUpdateService();
         _taskbarWidget = new TaskbarWidgetWindow(
             _viewModel,
             ShowFullWindow,
-            RequestExit);
+            RequestExit,
+            _updateService,
+            RestartWithUpdate);
         MainWindow = _taskbarWidget;
         _taskbarWidget.Show();
         _ = _viewModel.RefreshAsync();
+        _updateService.Start();
     }
 
     public void RequestExit()
@@ -119,6 +124,8 @@ public partial class App : System.Windows.Application
         _singleInstanceMutex = null;
         _themeService?.Dispose();
         _themeService = null;
+        _updateService?.Dispose();
+        _updateService = null;
         _viewModel?.Dispose();
         _viewModel = null;
         base.OnExit(e);
@@ -168,6 +175,12 @@ public partial class App : System.Windows.Application
         {
             MainWindow = _taskbarWidget;
         }
+    }
+
+    private void RestartWithUpdate(PreparedAppUpdate update)
+    {
+        _updateService?.LaunchUpdater(update);
+        RequestExit();
     }
 
     private bool TryAcquireSingleInstance()

@@ -380,6 +380,7 @@ RunStatusLineInstallerTests();
 RunCollapsedProviderStoreTests();
 RunTaskbarWidgetSettingsTests();
 RunManagedCliTests();
+RunAppUpdateTests();
 
 const string antigravityQuotaFixture =
     """
@@ -1002,6 +1003,60 @@ void RunManagedCliTests()
             Directory.Delete(root, recursive: true);
         }
     }
+}
+
+void RunAppUpdateTests()
+{
+    const string executableHash =
+        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    const string githubReleaseFixture =
+        $$"""
+        {
+          "tag_name": "v1.2.4",
+          "html_url": "https://github.com/jinjaeyeon/QuotaGlass/releases/tag/v1.2.4",
+          "assets": [
+            {
+              "name": "QuotaGlass-1.2.4-win-x64.exe",
+              "browser_download_url": "https://github.com/jinjaeyeon/QuotaGlass/releases/download/v1.2.4/QuotaGlass-1.2.4-win-x64.exe"
+            },
+            {
+              "name": "QuotaGlass-1.2.4-win-x64.sha256",
+              "browser_download_url": "https://github.com/jinjaeyeon/QuotaGlass/releases/download/v1.2.4/QuotaGlass-1.2.4-win-x64.sha256"
+            }
+          ]
+        }
+        """;
+    var release = AppUpdateService.ParseGitHubRelease(githubReleaseFixture);
+    Require(
+        release.Version == new Version(1, 2, 4) &&
+        release.AssetName == "QuotaGlass-1.2.4-win-x64.exe" &&
+        release.ExpectedSha256 is null &&
+        release.ChecksumDownloadUrl is not null,
+        "QuotaGlass GitHub 릴리즈 파싱");
+
+    var parsedHash = AppUpdateService.ParseChecksumFile(
+        $"{executableHash}  QuotaGlass-1.2.4-win-x64.exe",
+        release.AssetName);
+    Require(parsedHash == executableHash, "QuotaGlass 업데이트 체크섬 파싱");
+
+    const string digestFixture =
+        $$"""
+        {
+          "tag_name": "v1.2.5",
+          "assets": [
+            {
+              "name": "QuotaGlass-1.2.5-win-x64.exe",
+              "browser_download_url": "https://github.com/example/QuotaGlass-1.2.5-win-x64.exe",
+              "digest": "sha256:{{executableHash}}"
+            }
+          ]
+        }
+        """;
+    var digestRelease = AppUpdateService.ParseGitHubRelease(digestFixture);
+    Require(
+        digestRelease.ExpectedSha256 == executableHash &&
+        digestRelease.ChecksumDownloadUrl is null,
+        "QuotaGlass GitHub digest 파싱");
 }
 
 static bool Approximately(double left, double right) =>

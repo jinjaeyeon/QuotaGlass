@@ -9,6 +9,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>QuotaGlass</RootNamespace>
     <AssemblyName>QuotaGlass</AssemblyName>
+    <VersionPrefix>0.1.0</VersionPrefix>
     <ApplicationIcon>Assets\QuotaGlass.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>

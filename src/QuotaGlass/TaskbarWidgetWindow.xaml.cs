@@ -35,6 +35,8 @@ public partial class TaskbarWidgetWindow : Window
     private static readonly nint HwndTopmost = new(-1);
     private readonly Action _openFullWindow;
     private readonly Action _exitApplication;
+    private readonly AppUpdateService _updateService;
+    private readonly Action<PreparedAppUpdate> _restartWithUpdate;
     private readonly MainViewModel _viewModel;
     private readonly DispatcherTimer _positionTimer;
     private readonly HashSet<string> _selectedProviderIds;
@@ -53,6 +55,7 @@ public partial class TaskbarWidgetWindow : Window
     private bool _isDragging;
     private bool _isHiddenAutomatically;
     private bool _isClosed;
+    private string? _updateStatusText;
 
     public ObservableCollection<ProviderUsageViewModel> WidgetProviders
     {
@@ -75,7 +78,9 @@ public partial class TaskbarWidgetWindow : Window
     public TaskbarWidgetWindow(
         MainViewModel viewModel,
         Action openFullWindow,
-        Action exitApplication)
+        Action exitApplication,
+        AppUpdateService updateService,
+        Action<PreparedAppUpdate> restartWithUpdate)
     {
         InitializeComponent();
 
@@ -83,6 +88,8 @@ public partial class TaskbarWidgetWindow : Window
         _viewModel = viewModel;
         _openFullWindow = openFullWindow;
         _exitApplication = exitApplication;
+        _updateService = updateService;
+        _restartWithUpdate = restartWithUpdate;
         _mouseHookCallback = OnLowLevelMouse;
         _selectedProviderIds = TaskbarWidgetProviderStore.LoadOrDefault();
         _positionRatio = TaskbarWidgetPlacementStore.Load();
@@ -108,6 +115,7 @@ public partial class TaskbarWidgetWindow : Window
         SizeChanged += OnSizeChanged;
         _viewModel.Providers.CollectionChanged += OnProvidersChanged;
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
+        _updateService.StateChanged += OnUpdateStateChanged;
         UpdateWidgetProviders();
     }
 
@@ -331,6 +339,38 @@ public partial class TaskbarWidgetWindow : Window
         RoutedEventArgs e) =>
         _viewModel.RefreshCommand.Execute(null);
 
+    private async void UpdateMenuItem_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        if (_updateService.AvailableUpdate is null ||
+            _updateService.IsPreparingUpdate)
+        {
+            return;
+        }
+
+        UpdateAppUpdateMenuItem();
+        try
+        {
+            SetUpdateStatus("업데이트 다운로드 중…");
+            var update = await _updateService.PrepareUpdateAsync(
+                CancellationToken.None);
+            SetUpdateStatus("재시작 중…");
+            _restartWithUpdate(update);
+        }
+        catch (Exception exception)
+        {
+            SetUpdateStatus(null);
+            UpdateAppUpdateMenuItem();
+            System.Windows.MessageBox.Show(
+                this,
+                $"업데이트에 실패했습니다.\n{exception.Message}",
+                "QuotaGlass 업데이트",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+    }
+
     private void WidgetContextMenu_Opened(
         object sender,
         RoutedEventArgs e)
@@ -341,6 +381,7 @@ public partial class TaskbarWidgetWindow : Window
         UpdateVerticalLayoutMenuItem();
         UpdateWidgetTransparencyMenuItems();
         UpdateThemeMenuItems();
+        UpdateAppUpdateMenuItem();
 
         for (var index = WidgetContextMenu.Items.Count - 1; index >= 0; index--)
         {
@@ -403,6 +444,22 @@ public partial class TaskbarWidgetWindow : Window
         object sender,
         RoutedEventArgs e) =>
         StopOutsideClickMonitor();
+
+    private void OnUpdateStateChanged(object? sender, EventArgs e)
+    {
+        if (_isClosed)
+        {
+            return;
+        }
+
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.BeginInvoke(UpdateAppUpdateMenuItem);
+            return;
+        }
+
+        UpdateAppUpdateMenuItem();
+    }
 
     private void StartOutsideClickMonitor()
     {
@@ -933,6 +990,51 @@ public partial class TaskbarWidgetWindow : Window
             : string.Empty;
     }
 
+    private void UpdateAppUpdateMenuItem()
+    {
+        if (_updateStatusText is not null)
+        {
+            UpdateMenuSeparator.Visibility = Visibility.Visible;
+            UpdateMenuItem.Visibility = Visibility.Visible;
+            UpdateMenuItem.IsEnabled = false;
+            UpdateMenuItem.Header = _updateStatusText;
+            return;
+        }
+
+        if (_updateService.IsPreparingUpdate)
+        {
+            UpdateMenuSeparator.Visibility = Visibility.Visible;
+            UpdateMenuItem.Visibility = Visibility.Visible;
+            UpdateMenuItem.IsEnabled = false;
+            UpdateMenuItem.Header = "업데이트 다운로드 중…";
+            return;
+        }
+
+        if (_updateService.AvailableUpdate is not { } update)
+        {
+            UpdateMenuSeparator.Visibility = Visibility.Collapsed;
+            UpdateMenuItem.Visibility = Visibility.Collapsed;
+            UpdateMenuItem.IsEnabled = false;
+            return;
+        }
+
+        UpdateMenuSeparator.Visibility = Visibility.Visible;
+        UpdateMenuItem.Visibility = Visibility.Visible;
+        UpdateMenuItem.IsEnabled = true;
+        UpdateMenuItem.Header =
+            $"QuotaGlass 업데이트 (v{update.DisplayVersion})";
+    }
+
+    private void SetUpdateStatus(string? status)
+    {
+        _updateStatusText = status;
+        UpdateStatusTextBlock.Text = status ?? string.Empty;
+        UpdateStatusBanner.Visibility = status is null
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+        UpdateAppUpdateMenuItem();
+    }
+
     private void SetWidgetTransparency(int transparencyPercent)
     {
         _widgetTransparencyPercent = Math.Clamp(
@@ -1085,6 +1187,7 @@ public partial class TaskbarWidgetWindow : Window
         _positionTimer.Tick -= OnPositionTimerTick;
         _viewModel.Providers.CollectionChanged -= OnProvidersChanged;
         SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
+        _updateService.StateChanged -= OnUpdateStateChanged;
         base.OnClosed(e);
     }
 

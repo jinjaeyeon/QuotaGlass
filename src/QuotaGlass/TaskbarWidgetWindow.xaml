@@ -284,6 +284,19 @@
                                    FontSize="12" />
                     </MenuItem.Icon>
                 </MenuItem>
+                <Separator x:Name="UpdateMenuSeparator"
+                           Visibility="Collapsed" />
+                <MenuItem x:Name="UpdateMenuItem"
+                          Header="업데이트"
+                          Visibility="Collapsed"
+                          Click="UpdateMenuItem_Click">
+                    <MenuItem.Icon>
+                        <TextBlock HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   FontSize="14"
+                                   Text="↓" />
+                    </MenuItem.Icon>
+                </MenuItem>
                 <Separator />
                 <MenuItem x:Name="FreeMovementMenuItem"
                           Header="화면 전체에서 자유롭게 이동"
@@ -552,6 +565,31 @@
                            FontSize="9"
                            Text="…" />
             </StackPanel>
+
+            <Border x:Name="UpdateStatusBanner"
+                    Padding="9,5"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Background="{DynamicResource ContextMenuBrush}"
+                    BorderBrush="{DynamicResource BorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="6"
+                    IsHitTestVisible="False"
+                    Visibility="Collapsed">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock VerticalAlignment="Center"
+                               Foreground="{DynamicResource SafeBrush}"
+                               FontSize="13"
+                               Text="↓" />
+                    <TextBlock x:Name="UpdateStatusTextBlock"
+                               Margin="5,0,0,0"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource TextBrush}"
+                               FontSize="10"
+                               FontWeight="SemiBold"
+                               Text="업데이트 중…" />
+                </StackPanel>
+            </Border>
         </Grid>
     </Border>
 </Window>
