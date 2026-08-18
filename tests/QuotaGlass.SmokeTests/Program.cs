@@ -80,6 +80,37 @@ Require(
 Require(
     snapshots.Single(snapshot => snapshot.Provider == "claude-code").Meters.Count == 2,
     "Claude Code 5시간/주간 meter");
+var lastKnownClaude = snapshots.Single(snapshot =>
+    snapshot.Provider == "claude-code");
+var transientClaudeFailure = new UsageSnapshot(
+    lastKnownClaude.Provider,
+    lastKnownClaude.DisplayName,
+    lastKnownClaude.IconText,
+    lastKnownClaude.AccountLabel,
+    [],
+    now,
+    "Claude Code auth status",
+    UsageSnapshotState.Error,
+    "Claude Code /usage 응답 시간 초과");
+var preservedClaude = MainViewModel.PreserveLastUsage(
+    transientClaudeFailure,
+    lastKnownClaude);
+Require(
+    preservedClaude.Meters.Count == lastKnownClaude.Meters.Count &&
+    preservedClaude.StatusMessage?.Contains(
+        "마지막 정상값 표시",
+        StringComparison.Ordinal) == true,
+    "Claude 일시 실패 시 마지막 정상 사용량 보존");
+var availableWithoutMeters = transientClaudeFailure with
+{
+    State = UsageSnapshotState.Available
+};
+Require(
+    MainViewModel.PreserveLastUsage(
+            availableWithoutMeters,
+            lastKnownClaude)
+        .Meters.Count == 0,
+    "정상 상태의 빈 meter는 임의 보존하지 않음");
 var codex = snapshots.Single(snapshot => snapshot.Provider == "codex");
 Require(codex.AccountLabel.Contains("팀", StringComparison.Ordinal), "Codex 팀 계정");
 Require(

@@ -10,11 +10,11 @@ public sealed class ClaudeCodeUsageProvider(
     AgentInstallation installation) : IUsageProvider
 {
     private static readonly TimeSpan UsageStartupTimeout =
-        TimeSpan.FromSeconds(2);
+        TimeSpan.FromSeconds(10);
     private static readonly TimeSpan UsageMinimumWarmup =
         TimeSpan.FromSeconds(2);
     private static readonly TimeSpan UsageScreenTimeout =
-        TimeSpan.FromSeconds(6);
+        TimeSpan.FromSeconds(15);
     private static readonly TimeSpan StatusLineCacheMaxAge =
         TimeSpan.FromMinutes(10);
 
@@ -64,14 +64,6 @@ public sealed class ClaudeCodeUsageProvider(
             }
         }
 
-        using var usageCancellation =
-            CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var usageTask = ReadUsageScreenAsync(
-            installation.ExecutablePath,
-            cachedWorkingDirectory,
-            now,
-            usageCancellation.Token);
-
         var startInfo = new ProcessStartInfo
         {
             FileName = installation.ExecutablePath,
@@ -88,9 +80,20 @@ public sealed class ClaudeCodeUsageProvider(
         using var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException(
                 "Claude Code 인증 상태 확인을 시작하지 못했습니다.");
-        var output = await process.StandardOutput.ReadToEndAsync(
-            cancellationToken);
-        await process.WaitForExitAsync(cancellationToken);
+        var outputTask = process.StandardOutput.ReadToEndAsync();
+        var errorTask = process.StandardError.ReadToEndAsync();
+        string output;
+        try
+        {
+            await process.WaitForExitAsync(cancellationToken);
+            output = await outputTask;
+            _ = await errorTask;
+        }
+        finally
+        {
+            await StopProcessAsync(process);
+            await DrainProcessOutputAsync(outputTask, errorTask);
+        }
 
         using var document = JsonDocument.Parse(output);
         var loggedIn =
@@ -120,7 +123,11 @@ public sealed class ClaudeCodeUsageProvider(
 
         if (isSubscription)
         {
-            var usageOutput = await usageTask;
+            var usageOutput = await ReadUsageScreenAsync(
+                installation.ExecutablePath,
+                cachedWorkingDirectory,
+                now,
+                cancellationToken);
             var meters = ClaudeUsageScreenParser.Parse(
                 usageOutput,
                 now);
@@ -140,19 +147,6 @@ public sealed class ClaudeCodeUsageProvider(
                     "Claude Code /usage");
             }
         }
-        else
-        {
-            usageCancellation.Cancel();
-            try
-            {
-                _ = await usageTask;
-            }
-            catch (OperationCanceledException)
-            {
-                // The speculative /usage session is no longer needed.
-            }
-        }
-
         return new UsageSnapshot(
             ProviderId,
             DisplayName,
@@ -269,8 +263,7 @@ public sealed class ClaudeCodeUsageProvider(
             usageReady,
             observedAt,
             cancellationToken);
-        var errorTask = process.StandardError.ReadToEndAsync(
-            cancellationToken);
+        var errorTask = process.StandardError.ReadToEndAsync();
 
         try
         {
@@ -292,17 +285,60 @@ public sealed class ClaudeCodeUsageProvider(
         }
         finally
         {
-            if (!process.HasExited)
-            {
-                process.Kill(true);
-            }
-
-            await process.WaitForExitAsync(CancellationToken.None);
+            await StopProcessAsync(process);
+            await DrainProcessOutputAsync(outputTask, errorTask);
         }
 
         await outputTask;
         _ = await errorTask;
         return output.ToString();
+    }
+
+    private static async Task StopProcessAsync(Process process)
+    {
+        try
+        {
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+            }
+        }
+        catch (InvalidOperationException)
+        {
+            // The process exited between HasExited and Kill.
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            // The process may have exited while the process tree was killed.
+        }
+
+        try
+        {
+            await process.WaitForExitAsync(CancellationToken.None);
+        }
+        catch (InvalidOperationException)
+        {
+            // The process was already disposed or exited before waiting.
+        }
+    }
+
+    private static async Task DrainProcessOutputAsync(
+        Task outputTask,
+        Task<string> errorTask)
+    {
+        try
+        {
+            await Task.WhenAll(outputTask, errorTask);
+        }
+        catch (Exception) when (
+            outputTask.IsCanceled ||
+            outputTask.IsFaulted ||
+            errorTask.IsCanceled ||
+            errorTask.IsFaulted)
+        {
+            // The original process/cancellation exception is reported by the
+            // caller after the pipes have been drained.
+        }
     }
 
     private static async Task ReadUsageOutputAsync(

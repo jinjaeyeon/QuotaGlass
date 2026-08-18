@@ -122,7 +122,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         _refreshCancellation?.Cancel();
         _refreshCancellation?.Dispose();
-        _refreshCancellation = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        _refreshCancellation = new CancellationTokenSource(TimeSpan.FromSeconds(30));
 
         IsRefreshing = true;
         UpdateSummary = "사용량 갱신 중…";
@@ -250,6 +250,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         int providerIndex,
         DateTimeOffset now)
     {
+        var existingProvider = Providers.FirstOrDefault(provider =>
+            provider.Provider == snapshot.Provider);
+        snapshot = PreserveLastUsage(
+            snapshot,
+            existingProvider?.Snapshot);
         var updatedProvider = new ProviderUsageViewModel(snapshot, now);
 
         for (var index = 0; index < Providers.Count; index++)
@@ -274,6 +279,32 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         Providers.Insert(insertionIndex, updatedProvider);
         UpdateProviderVisibility();
+    }
+
+    internal static UsageSnapshot PreserveLastUsage(
+        UsageSnapshot incoming,
+        UsageSnapshot? previous)
+    {
+        if (previous is null ||
+            previous.Meters.Count == 0 ||
+            incoming.Meters.Count > 0 ||
+            incoming.State == UsageSnapshotState.Available)
+        {
+            return incoming;
+        }
+
+        var status = string.IsNullOrWhiteSpace(incoming.StatusMessage)
+            ? "일시적인 갱신 실패 · 마지막 정상값 표시"
+            : $"{incoming.StatusMessage} · 마지막 정상값 표시";
+        return incoming with
+        {
+            AccountLabel = previous.AccountLabel,
+            Meters = previous.Meters,
+            ObservedAt = previous.ObservedAt,
+            Source = previous.Source,
+            StatusMessage = status,
+            ResetCredits = previous.ResetCredits
+        };
     }
 
     private void UpdateProviderVisibility()

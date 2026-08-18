@@ -6,6 +6,7 @@ public sealed class ProviderUsageViewModel
 {
     public ProviderUsageViewModel(UsageSnapshot snapshot, DateTimeOffset now)
     {
+        Snapshot = snapshot;
         Provider = snapshot.Provider;
         DisplayName = snapshot.DisplayName;
         IconText = snapshot.IconText;
@@ -29,6 +30,7 @@ public sealed class ProviderUsageViewModel
     }
 
     public string Provider { get; }
+    internal UsageSnapshot Snapshot { get; }
     public string DisplayName { get; }
     public string IconText { get; }
     public System.Windows.Media.Geometry? IconGeometry { get; }
