@@ -31,6 +31,7 @@ public partial class TaskbarWidgetWindow : Window
     private const uint GwHwndNext = 2;
     private const uint MonitorDefaultToNearest = 2;
     private const double DefaultWidgetHeight = 44;
+    private const int MaxWidgetTransparencyPercent = 75;
     private static readonly nint HwndTopmost = new(-1);
     private readonly Action _openFullWindow;
     private readonly Action _exitApplication;
@@ -46,6 +47,7 @@ public partial class TaskbarWidgetWindow : Window
     private nint _lastTaskbar;
     private bool _freeMovementEnabled;
     private bool _verticalLayoutEnabled;
+    private int _widgetTransparencyPercent;
     private TaskbarWidgetPlacementStore.ScreenPosition? _screenPosition;
     private bool _isPointerDown;
     private bool _isDragging;
@@ -89,6 +91,12 @@ public partial class TaskbarWidgetWindow : Window
             TaskbarWidgetSettingsStore.LoadFreeMovementEnabled();
         _verticalLayoutEnabled =
             TaskbarWidgetSettingsStore.LoadVerticalLayoutEnabled();
+        _widgetTransparencyPercent =
+            Math.Clamp(
+                TaskbarWidgetSettingsStore.LoadTransparencyPercent(),
+                0,
+                MaxWidgetTransparencyPercent);
+        ApplyWidgetTransparency();
         _positionTimer = new DispatcherTimer
         {
             Interval = TimeSpan.FromMilliseconds(500)
@@ -331,6 +339,7 @@ public partial class TaskbarWidgetWindow : Window
         UpdateWindowsStartupMenuItem();
         UpdateFreeMovementMenuItem();
         UpdateVerticalLayoutMenuItem();
+        UpdateWidgetTransparencyMenuItems();
         UpdateThemeMenuItems();
 
         for (var index = WidgetContextMenu.Items.Count - 1; index >= 0; index--)
@@ -475,6 +484,19 @@ public partial class TaskbarWidgetWindow : Window
         object sender,
         RoutedEventArgs e) =>
         SetVerticalLayoutEnabled(VerticalLayoutMenuItem.IsChecked);
+
+    private void WidgetTransparencyMenuItem_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        if (sender is not WpfMenuItem menuItem ||
+            !int.TryParse(menuItem.Tag?.ToString(), out var transparencyPercent))
+        {
+            return;
+        }
+
+        SetWidgetTransparency(transparencyPercent);
+    }
 
     private void StartWithWindowsMenuItem_Click(
         object sender,
@@ -909,6 +931,51 @@ public partial class TaskbarWidgetWindow : Window
         VerticalLayoutCheckGlyph.Text = _verticalLayoutEnabled
             ? "✓"
             : string.Empty;
+    }
+
+    private void SetWidgetTransparency(int transparencyPercent)
+    {
+        _widgetTransparencyPercent = Math.Clamp(
+            transparencyPercent,
+            0,
+            MaxWidgetTransparencyPercent);
+        ApplyWidgetTransparency();
+        TaskbarWidgetSettingsStore.SaveTransparencyPercent(
+            _widgetTransparencyPercent);
+        UpdateWidgetTransparencyMenuItems();
+    }
+
+    private void ApplyWidgetTransparency() =>
+        Opacity = 1 - _widgetTransparencyPercent / 100d;
+
+    private void UpdateWidgetTransparencyMenuItems()
+    {
+        UpdateWidgetTransparencyMenuItem(
+            WidgetTransparency0MenuItem,
+            WidgetTransparency0CheckGlyph,
+            0);
+        UpdateWidgetTransparencyMenuItem(
+            WidgetTransparency25MenuItem,
+            WidgetTransparency25CheckGlyph,
+            25);
+        UpdateWidgetTransparencyMenuItem(
+            WidgetTransparency50MenuItem,
+            WidgetTransparency50CheckGlyph,
+            50);
+        UpdateWidgetTransparencyMenuItem(
+            WidgetTransparency75MenuItem,
+            WidgetTransparency75CheckGlyph,
+            75);
+    }
+
+    private void UpdateWidgetTransparencyMenuItem(
+        WpfMenuItem menuItem,
+        WpfTextBlock checkGlyph,
+        int transparencyPercent)
+    {
+        var isChecked = _widgetTransparencyPercent == transparencyPercent;
+        menuItem.IsChecked = isChecked;
+        checkGlyph.Text = isChecked ? "✓" : string.Empty;
     }
 
     private void ApplyWidgetLayout()

@@ -222,6 +222,69 @@
                     </MenuItem.Icon>
                 </MenuItem>
                 <Separator />
+                <MenuItem x:Name="WidgetTransparencyHeading"
+                          Header="위젯 투명도"
+                          IsEnabled="False">
+                    <MenuItem.Icon>
+                        <TextBlock HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   FontSize="13"
+                                   Text="◌" />
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem x:Name="WidgetTransparency0MenuItem"
+                          Header="투명도 0% (불투명)"
+                          Tag="0"
+                          IsCheckable="True"
+                          StaysOpenOnClick="True"
+                          Click="WidgetTransparencyMenuItem_Click">
+                    <MenuItem.Icon>
+                        <TextBlock x:Name="WidgetTransparency0CheckGlyph"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   FontSize="12" />
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem x:Name="WidgetTransparency25MenuItem"
+                          Header="투명도 25%"
+                          Tag="25"
+                          IsCheckable="True"
+                          StaysOpenOnClick="True"
+                          Click="WidgetTransparencyMenuItem_Click">
+                    <MenuItem.Icon>
+                        <TextBlock x:Name="WidgetTransparency25CheckGlyph"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   FontSize="12" />
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem x:Name="WidgetTransparency50MenuItem"
+                          Header="투명도 50%"
+                          Tag="50"
+                          IsCheckable="True"
+                          StaysOpenOnClick="True"
+                          Click="WidgetTransparencyMenuItem_Click">
+                    <MenuItem.Icon>
+                        <TextBlock x:Name="WidgetTransparency50CheckGlyph"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   FontSize="12" />
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem x:Name="WidgetTransparency75MenuItem"
+                          Header="투명도 75%"
+                          Tag="75"
+                          IsCheckable="True"
+                          StaysOpenOnClick="True"
+                          Click="WidgetTransparencyMenuItem_Click">
+                    <MenuItem.Icon>
+                        <TextBlock x:Name="WidgetTransparency75CheckGlyph"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   FontSize="12" />
+                    </MenuItem.Icon>
+                </MenuItem>
+                <Separator />
                 <MenuItem x:Name="FreeMovementMenuItem"
                           Header="화면 전체에서 자유롭게 이동"
                           IsCheckable="True"

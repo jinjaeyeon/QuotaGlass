@@ -378,6 +378,7 @@ Require(
 
 RunStatusLineInstallerTests();
 RunCollapsedProviderStoreTests();
+RunTaskbarWidgetSettingsTests();
 RunManagedCliTests();
 
 const string antigravityQuotaFixture =
@@ -820,6 +821,47 @@ void RunCollapsedProviderStoreTests()
         Require(
             restoredProviderIds.SetEquals(["codex", "cursor"]),
             "접은 에이전트 상태 저장 및 복원");
+    }
+    finally
+    {
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+}
+
+void RunTaskbarWidgetSettingsTests()
+{
+    var root = Path.Combine(
+        Path.GetTempPath(),
+        $"QuotaGlass.WidgetSettings.{Guid.NewGuid():N}");
+    var settingsPath = Path.Combine(root, "widget-transparency.txt");
+
+    try
+    {
+        Require(
+            TaskbarWidgetSettingsStore.LoadTransparencyPercent(settingsPath) ==
+            0,
+            "위젯 투명도 기본값");
+
+        TaskbarWidgetSettingsStore.SaveTransparencyPercent(settingsPath, 50);
+        Require(
+            TaskbarWidgetSettingsStore.LoadTransparencyPercent(settingsPath) ==
+            50,
+            "위젯 투명도 저장 및 복원");
+
+        File.WriteAllText(settingsPath, "150");
+        Require(
+            TaskbarWidgetSettingsStore.LoadTransparencyPercent(settingsPath) ==
+            100,
+            "위젯 투명도 상한 보정");
+
+        File.WriteAllText(settingsPath, "-10");
+        Require(
+            TaskbarWidgetSettingsStore.LoadTransparencyPercent(settingsPath) ==
+            0,
+            "위젯 투명도 하한 보정");
     }
     finally
     {
