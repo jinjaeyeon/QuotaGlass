@@ -16,15 +16,77 @@ public sealed class JetBrainsAiUsageProvider(
     public string IconText => installation.IconText;
     public string AccountLabel => installation.AccountLabel;
 
-    public Task<UsageSnapshot> FetchAsync(CancellationToken cancellationToken)
+    public async Task<UsageSnapshot> FetchAsync(
+        CancellationToken cancellationToken)
     {
-        if (installation.UsageStatePath is null)
+        var candidates = FindQuotaStateCandidates(
+            installation.UsageStatePath);
+        if (candidates.Count == 0)
         {
             throw new InvalidOperationException(
                 "JetBrains AI quota 상태 파일을 찾을 수 없습니다.");
         }
 
-        return Task.FromResult(ParseState(installation.UsageStatePath));
+        Exception? lastError = null;
+        foreach (var candidate in candidates)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                return ParseState(candidate);
+            }
+            catch (Exception exception) when (
+                exception is IOException or
+                    UnauthorizedAccessException or
+                    InvalidOperationException or
+                    FormatException or
+                    XmlException or
+                    JsonException)
+            {
+                lastError = exception;
+            }
+        }
+
+        throw new InvalidOperationException(
+            "JetBrains AI quota 캐시를 읽을 수 없습니다.",
+            lastError);
+    }
+
+    internal static IReadOnlyList<string> FindQuotaStateCandidates(
+        string? preferredPath = null)
+    {
+        var candidates = new List<string>();
+        if (!string.IsNullOrWhiteSpace(preferredPath) &&
+            File.Exists(preferredPath))
+        {
+            candidates.Add(Path.GetFullPath(preferredPath));
+        }
+
+        var root = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "JetBrains");
+        if (Directory.Exists(root))
+        {
+            try
+            {
+                candidates.AddRange(
+                    Directory.EnumerateFiles(
+                            root,
+                            "AIAssistantQuotaManager2.xml",
+                            SearchOption.AllDirectories)
+                        .Where(File.Exists)
+                        .OrderByDescending(File.GetLastWriteTimeUtc)
+                        .Select(Path.GetFullPath));
+            }
+            catch (Exception exception) when (
+                exception is UnauthorizedAccessException or IOException)
+            {
+            }
+        }
+
+        return candidates
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private UsageSnapshot ParseState(string statePath)

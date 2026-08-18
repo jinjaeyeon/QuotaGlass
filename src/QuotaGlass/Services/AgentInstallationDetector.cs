@@ -104,6 +104,13 @@ public sealed class AgentInstallationDetector
                 "Programs",
                 "antigravity",
                 "Antigravity.exe"));
+        var desktopMainLogPath = FindFirstExisting(
+            Path.Combine(
+                Environment.GetFolderPath(
+                    Environment.SpecialFolder.ApplicationData),
+                "Antigravity",
+                "logs",
+                "main.log"));
 
         if (cliPath is null && desktopPath is null)
         {
@@ -117,7 +124,8 @@ public sealed class AgentInstallationDetector
                 "✦",
                 cliPath is null ? "IDE 설치됨" : "설치됨",
                 cliPath,
-                cliPath is null ? null : ReadVersion(cliPath)));
+                cliPath is null ? null : ReadVersion(cliPath),
+                desktopMainLogPath));
     }
 
     private static void AddCursor(
@@ -135,11 +143,23 @@ public sealed class AgentInstallationDetector
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "Cursor",
             "auth.json");
+        var desktopAuthPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "Cursor",
+            "User",
+            "globalStorage",
+            "state.vscdb");
 
-        if (executablePath is null && !File.Exists(authPath))
+        if (executablePath is null &&
+            !File.Exists(authPath) &&
+            !File.Exists(desktopAuthPath))
         {
             return;
         }
+
+        var usageStatePath = FindFirstExisting(
+            desktopAuthPath,
+            authPath);
 
         installations.Add(
             new AgentInstallation(
@@ -149,7 +169,7 @@ public sealed class AgentInstallationDetector
                 "설치됨",
                 executablePath,
                 executablePath is null ? null : ReadVersion(executablePath),
-                File.Exists(authPath) ? authPath : null));
+                usageStatePath));
     }
 
     private static string? FindOnPath(string command)
