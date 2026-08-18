@@ -17,6 +17,19 @@ public sealed class AgentInstallationDetector
             "C",
             "claude");
 
+        if (!installations.Any(item => item.ProviderId == "claude-code") &&
+            ClaudeDesktopCredentialStore.HasCredentialFiles())
+        {
+            installations.Add(
+                new AgentInstallation(
+                    "claude-code",
+                    "Claude Code",
+                    "C",
+                    "Claude Desktop 인증됨",
+                    null,
+                    null));
+        }
+
         AddCommandLineAgent(
             installations,
             "codex",

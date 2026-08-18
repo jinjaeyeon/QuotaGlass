@@ -357,6 +357,8 @@ Require(
         0.588),
     "Claude usage API 주간 잔량");
 await RunClaudeUsageApiClientTests();
+await RunClaudeCredentialFallbackTests();
+await RunClaudeDesktopCredentialStoreTests();
 var cachedWorkingDirectoryFixture = System.Text.Json.JsonSerializer.Serialize(
     new { cwd = Environment.CurrentDirectory });
 Require(
@@ -1295,6 +1297,94 @@ static async Task RunClaudeUsageApiClientTests()
             Directory.Delete(root, recursive: true);
         }
     }
+}
+
+static async Task RunClaudeDesktopCredentialStoreTests()
+{
+    var appData = Environment.GetFolderPath(
+        Environment.SpecialFolder.ApplicationData);
+    var configPath = Path.Combine(appData, "Claude", "config.json");
+    var localStatePath = Path.Combine(appData, "Claude", "Local State");
+    if (!File.Exists(configPath) || !File.Exists(localStatePath))
+    {
+        return;
+    }
+
+    var store = new ClaudeDesktopCredentialStore(
+        configPath,
+        localStatePath);
+    var credentials = await store.ReadAsync(CancellationToken.None);
+    Require(
+        credentials is not null &&
+        !string.IsNullOrWhiteSpace(credentials.AccessToken) &&
+        !string.IsNullOrWhiteSpace(credentials.RefreshToken),
+        "Claude Desktop safeStorage 인증 해석");
+}
+
+static async Task RunClaudeCredentialFallbackTests()
+{
+    var authorizationTokens = new List<string>();
+    var handler = new StubHttpMessageHandler(request =>
+    {
+        authorizationTokens.Add(
+            request.Headers.Authorization?.Parameter ?? string.Empty);
+        if (authorizationTokens.Count == 1)
+        {
+            return new HttpResponseMessage(HttpStatusCode.Unauthorized);
+        }
+
+        return new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                """
+                {
+                  "five_hour": { "utilization": 10, "resets_at": "2026-08-18T16:00:00Z" },
+                  "seven_day": { "utilization": 20, "resets_at": "2026-08-21T12:00:00Z" }
+                }
+                """,
+                Encoding.UTF8,
+                "application/json")
+        };
+    });
+
+    using var client = new HttpClient(handler);
+    var expiration = DateTimeOffset.UtcNow
+        .AddHours(1)
+        .ToUnixTimeMilliseconds();
+    var apiClient = new ClaudeUsageApiClient(
+        client,
+        [
+            new FixedClaudeCredentialStore(
+                "desktop-access-token",
+                expiration),
+            new FixedClaudeCredentialStore(
+                "cli-access-token",
+                expiration)
+        ]);
+    var meters = await apiClient.FetchAsync(
+        "2.1.229",
+        CancellationToken.None);
+    Require(
+        authorizationTokens.SequenceEqual(
+            ["desktop-access-token", "cli-access-token"]),
+        "Claude Desktop API 후 CLI API fallback 순서");
+    Require(meters.Count == 2, "Claude credential fallback meter 개수");
+}
+
+sealed class FixedClaudeCredentialStore(
+    string accessToken,
+    long expiresAt) : IClaudeCredentialStore
+{
+    public Task<ClaudeOAuthCredentials?> ReadAsync(
+        CancellationToken cancellationToken) =>
+        Task.FromResult<ClaudeOAuthCredentials?>(
+            new ClaudeOAuthCredentials(accessToken, null, expiresAt, 0));
+
+    public Task<ClaudeOAuthCredentials?> SaveRefreshedAsync(
+        ClaudeOAuthCredentials previous,
+        ClaudeOAuthCredentials updated,
+        CancellationToken cancellationToken) =>
+        Task.FromResult<ClaudeOAuthCredentials?>(updated);
 }
 
 sealed class StubHttpMessageHandler(

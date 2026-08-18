@@ -30,12 +30,44 @@ public sealed class CodexAppServerUsageProvider(
         }
 
         Exception? lastException = null;
+        foreach (var codexHome in GetCodexHomeCandidates())
+        {
+            try
+            {
+                return await FetchWithRetriesAsync(
+                    installation.ExecutablePath,
+                    codexHome,
+                    cancellationToken);
+            }
+            catch (OperationCanceledException) when (
+                cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                lastException = exception;
+            }
+        }
+
+        throw new InvalidOperationException(
+            "Codex 사용량 조회를 완료하지 못했습니다.",
+            lastException);
+    }
+
+    private async Task<UsageSnapshot> FetchWithRetriesAsync(
+        string executablePath,
+        string? codexHome,
+        CancellationToken cancellationToken)
+    {
+        Exception? lastException = null;
         for (var attempt = 0; attempt < MaxFetchAttempts; attempt++)
         {
             try
             {
                 return await FetchOnceAsync(
-                    installation.ExecutablePath,
+                    executablePath,
+                    codexHome,
                     cancellationToken);
             }
             catch (OperationCanceledException) when (
@@ -61,9 +93,10 @@ public sealed class CodexAppServerUsageProvider(
 
     private async Task<UsageSnapshot> FetchOnceAsync(
         string executablePath,
+        string? codexHome,
         CancellationToken cancellationToken)
     {
-        using var process = StartAppServer(executablePath);
+        using var process = StartAppServer(executablePath, codexHome);
 
         try
         {
@@ -112,7 +145,69 @@ public sealed class CodexAppServerUsageProvider(
     internal static string BuildRateLimitsReadRequest() =>
         """{"id":3,"method":"account/rateLimits/read","params":{}}""";
 
-    private static Process StartAppServer(string executablePath)
+    internal static IReadOnlyList<string?> GetCodexHomeCandidates()
+    {
+        var candidates = new List<string?>();
+        var localAppData = Environment.GetFolderPath(
+            Environment.SpecialFolder.LocalApplicationData);
+        var roamingAppData = Environment.GetFolderPath(
+            Environment.SpecialFolder.ApplicationData);
+        var userProfile = Environment.GetFolderPath(
+            Environment.SpecialFolder.UserProfile);
+
+        AddCredentialHome(
+            candidates,
+            Path.Combine(localAppData, "OpenAI", "Codex"));
+        AddCredentialHome(
+            candidates,
+            Path.Combine(roamingAppData, "OpenAI", "Codex"));
+
+        var configuredHome = Environment.GetEnvironmentVariable("CODEX_HOME");
+        if (!string.IsNullOrWhiteSpace(configuredHome))
+        {
+            AddCandidate(candidates, configuredHome);
+        }
+
+        AddCredentialHome(
+            candidates,
+            Path.Combine(userProfile, ".codex"));
+
+        // Keep the original Codex environment fallback for installations that
+        // use a keychain or another auth store without auth.json.
+        if (candidates.Count == 0)
+        {
+            candidates.Add(null);
+        }
+
+        return candidates;
+    }
+
+    private static void AddCredentialHome(
+        ICollection<string?> candidates,
+        string home)
+    {
+        if (File.Exists(Path.Combine(home, "auth.json")))
+        {
+            AddCandidate(candidates, home);
+        }
+    }
+
+    private static void AddCandidate(
+        ICollection<string?> candidates,
+        string home)
+    {
+        if (candidates.Any(candidate =>
+                string.Equals(candidate, home, StringComparison.OrdinalIgnoreCase)))
+        {
+            return;
+        }
+
+        candidates.Add(home);
+    }
+
+    private static Process StartAppServer(
+        string executablePath,
+        string? codexHome)
     {
         var startInfo = new ProcessStartInfo
         {
@@ -124,6 +219,10 @@ public sealed class CodexAppServerUsageProvider(
             CreateNoWindow = true,
             WindowStyle = ProcessWindowStyle.Hidden
         };
+        if (!string.IsNullOrWhiteSpace(codexHome))
+        {
+            startInfo.Environment["CODEX_HOME"] = codexHome;
+        }
         startInfo.ArgumentList.Add("app-server");
         startInfo.ArgumentList.Add("--stdio");
 

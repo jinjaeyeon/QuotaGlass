@@ -41,12 +41,6 @@ public sealed class ClaudeCodeUsageProvider : IUsageProvider
     public async Task<UsageSnapshot> FetchAsync(
         CancellationToken cancellationToken)
     {
-        if (installation.ExecutablePath is null)
-        {
-            throw new InvalidOperationException(
-                "Claude Code 실행 파일을 찾을 수 없습니다.");
-        }
-
         var sidecar = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "QuotaGlass",
@@ -74,6 +68,38 @@ public sealed class ClaudeCodeUsageProvider : IUsageProvider
             isStatusLineCacheFresh = IsStatusLineCacheFresh(
                 cacheObservedAt,
                 now);
+        }
+
+        // The API chain is intentionally attempted before launching Claude
+        // Code. It tries Claude Desktop's protected OAuth cache first, then
+        // the CLI credential file inside ClaudeUsageApiClient.
+        var apiMeters = await usageApiClient.FetchAsync(
+            installation.Version,
+            cancellationToken);
+        if (apiMeters.Count > 0)
+        {
+            return new UsageSnapshot(
+                ProviderId,
+                DisplayName,
+                IconText,
+                "Claude · 5시간/주간",
+                apiMeters,
+                DateTimeOffset.Now,
+                "Claude Desktop/CLI usage API");
+        }
+
+        if (installation.ExecutablePath is null)
+        {
+            return new UsageSnapshot(
+                ProviderId,
+                DisplayName,
+                IconText,
+                "Claude Desktop",
+                [],
+                DateTimeOffset.Now,
+                "Claude Desktop auth",
+                UsageSnapshotState.AdapterPending,
+                "Claude Desktop 인증은 확인했지만 usage API에 연결되지 않음");
         }
 
         var startInfo = new ProcessStartInfo
@@ -135,21 +161,6 @@ public sealed class ClaudeCodeUsageProvider : IUsageProvider
 
         if (isSubscription)
         {
-            var apiMeters = await usageApiClient.FetchAsync(
-                installation.Version,
-                cancellationToken);
-            if (apiMeters.Count > 0)
-            {
-                return new UsageSnapshot(
-                    ProviderId,
-                    DisplayName,
-                    IconText,
-                    accountLabel,
-                    apiMeters,
-                    DateTimeOffset.Now,
-                    "Claude Code usage API");
-            }
-
             if (isStatusLineCacheFresh &&
                 cachedMeters.Count > 0 &&
                 cachedMeters.All(meter => meter.ResetsAt > now))

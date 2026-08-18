@@ -4,7 +4,6 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using QuotaGlass.Models;
 
 namespace QuotaGlass.Services;
@@ -15,35 +14,64 @@ internal sealed class ClaudeUsageApiClient
         "https://api.anthropic.com/api/oauth/usage";
     private const string TokenEndpoint =
         "https://platform.claude.com/v1/oauth/token";
-    private const string OAuthClientId =
-        "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
-    private const string OAuthBetaHeader = "oauth-2025-04-20";
-    private static readonly TimeSpan AccessTokenSafetyWindow =
-        TimeSpan.FromMinutes(2);
     private static readonly HttpClient DefaultClient = CreateHttpClient();
     private static readonly SemaphoreSlim RefreshGate = new(1, 1);
 
     private readonly HttpClient client;
-    private readonly string credentialsPath;
+    private readonly IReadOnlyList<IClaudeCredentialStore> credentialStores;
 
     public ClaudeUsageApiClient()
-        : this(DefaultClient, GetCredentialsPath())
+        : this(
+            DefaultClient,
+            [
+                new ClaudeDesktopCredentialStore(),
+                new ClaudeCliCredentialStore(GetCredentialsPath())
+            ])
     {
     }
 
     internal ClaudeUsageApiClient(
         HttpClient client,
         string credentialsPath)
+        : this(
+            client,
+            [new ClaudeCliCredentialStore(credentialsPath)])
+    {
+    }
+
+    internal ClaudeUsageApiClient(
+        HttpClient client,
+        IReadOnlyList<IClaudeCredentialStore> credentialStores)
     {
         this.client = client;
-        this.credentialsPath = credentialsPath;
+        this.credentialStores = credentialStores;
     }
 
     public async Task<IReadOnlyList<UsageMeter>> FetchAsync(
         string? cliVersion,
         CancellationToken cancellationToken)
     {
-        var credentials = await ReadCredentialsAsync(cancellationToken);
+        foreach (var credentialStore in credentialStores)
+        {
+            var meters = await TryFetchFromStoreAsync(
+                credentialStore,
+                cliVersion,
+                cancellationToken);
+            if (meters.Count > 0)
+            {
+                return meters;
+            }
+        }
+
+        return [];
+    }
+
+    private async Task<IReadOnlyList<UsageMeter>> TryFetchFromStoreAsync(
+        IClaudeCredentialStore credentialStore,
+        string? cliVersion,
+        CancellationToken cancellationToken)
+    {
+        var credentials = await credentialStore.ReadAsync(cancellationToken);
         if (credentials is null)
         {
             return [];
@@ -52,6 +80,7 @@ internal sealed class ClaudeUsageApiClient
         if (!credentials.HasUsableAccessToken(DateTimeOffset.UtcNow))
         {
             credentials = await RefreshCredentialsAsync(
+                credentialStore,
                 credentials,
                 forceRefresh: false,
                 cliVersion,
@@ -69,6 +98,7 @@ internal sealed class ClaudeUsageApiClient
         if (response.StatusCode == HttpStatusCode.Unauthorized)
         {
             credentials = await RefreshCredentialsAsync(
+                credentialStore,
                 credentials,
                 forceRefresh: true,
                 cliVersion,
@@ -112,7 +142,7 @@ internal sealed class ClaudeUsageApiClient
             accessToken);
         request.Headers.TryAddWithoutValidation(
             "anthropic-beta",
-            OAuthBetaHeader);
+            ClaudeOAuthConstants.OAuthBetaHeader);
         request.Headers.UserAgent.ParseAdd(BuildUserAgent(cliVersion));
 
         try
@@ -136,8 +166,9 @@ internal sealed class ClaudeUsageApiClient
         }
     }
 
-    private async Task<OAuthCredentials?> RefreshCredentialsAsync(
-        OAuthCredentials current,
+    private async Task<ClaudeOAuthCredentials?> RefreshCredentialsAsync(
+        IClaudeCredentialStore credentialStore,
+        ClaudeOAuthCredentials current,
         bool forceRefresh,
         string? cliVersion,
         CancellationToken cancellationToken)
@@ -150,7 +181,7 @@ internal sealed class ClaudeUsageApiClient
         await RefreshGate.WaitAsync(cancellationToken);
         try
         {
-            var latest = await ReadCredentialsAsync(cancellationToken);
+            var latest = await credentialStore.ReadAsync(cancellationToken);
             if (latest is null ||
                 string.IsNullOrWhiteSpace(latest.RefreshToken) ||
                 latest.IsRefreshTokenExpired(DateTimeOffset.UtcNow))
@@ -179,12 +210,12 @@ internal sealed class ClaudeUsageApiClient
                     {
                         grant_type = "refresh_token",
                         refresh_token = latest.RefreshToken,
-                        client_id = OAuthClientId
+                        client_id = ClaudeOAuthConstants.ClientId
                     })
             };
             request.Headers.TryAddWithoutValidation(
                 "anthropic-beta",
-                OAuthBetaHeader);
+                ClaudeOAuthConstants.OAuthBetaHeader);
             request.Headers.UserAgent.ParseAdd(BuildUserAgent(cliVersion));
 
             try
@@ -201,6 +232,7 @@ internal sealed class ClaudeUsageApiClient
                 var body = await response.Content.ReadAsStringAsync(
                     cancellationToken);
                 return await SaveRefreshedCredentialsAsync(
+                    credentialStore,
                     latest,
                     body,
                     cancellationToken);
@@ -224,15 +256,19 @@ internal sealed class ClaudeUsageApiClient
         }
     }
 
-    private async Task<OAuthCredentials?> SaveRefreshedCredentialsAsync(
-        OAuthCredentials previous,
-        string responseBody,
-        CancellationToken cancellationToken)
+    private static async Task<ClaudeOAuthCredentials?>
+        SaveRefreshedCredentialsAsync(
+            IClaudeCredentialStore credentialStore,
+            ClaudeOAuthCredentials previous,
+            string responseBody,
+            CancellationToken cancellationToken)
     {
         using var responseDocument = JsonDocument.Parse(responseBody);
         var responseRoot = responseDocument.RootElement;
-        string accessToken;
-        if (!TryReadString(responseRoot, "access_token", out accessToken) ||
+        if (!TryReadString(
+                responseRoot,
+                "access_token",
+                out var accessToken) ||
             !TryReadLong(responseRoot, "expires_in", out var expiresIn))
         {
             return null;
@@ -260,134 +296,10 @@ internal sealed class ClaudeUsageApiClient
             RefreshTokenExpiresAt = refreshTokenExpiresAt
         };
 
-        try
-        {
-            var originalJson = await File.ReadAllTextAsync(
-                credentialsPath,
-                cancellationToken);
-            var root = JsonNode.Parse(originalJson)?.AsObject();
-            var oauth = root?["claudeAiOauth"] as JsonObject;
-            if (root is null || oauth is null)
-            {
-                return null;
-            }
-
-            if (oauth["accessToken"]?.GetValue<string>() is { } currentAccessToken &&
-                !string.Equals(
-                    currentAccessToken,
-                    previous.AccessToken,
-                    StringComparison.Ordinal))
-            {
-                return await ReadCredentialsAsync(cancellationToken);
-            }
-
-            oauth["accessToken"] = updated.AccessToken;
-            if (!string.IsNullOrWhiteSpace(updated.RefreshToken))
-            {
-                oauth["refreshToken"] = updated.RefreshToken;
-            }
-
-            oauth["expiresAt"] = updated.ExpiresAt;
-            if (updated.RefreshTokenExpiresAt > 0)
-            {
-                oauth["refreshTokenExpiresAt"] = updated.RefreshTokenExpiresAt;
-            }
-
-            var temporaryPath = $"{credentialsPath}.{Guid.NewGuid():N}.tmp";
-            try
-            {
-                await File.WriteAllTextAsync(
-                    temporaryPath,
-                    root.ToJsonString(new JsonSerializerOptions
-                    {
-                        WriteIndented = true
-                    }),
-                    cancellationToken);
-                File.Move(temporaryPath, credentialsPath, overwrite: true);
-            }
-            finally
-            {
-                if (File.Exists(temporaryPath))
-                {
-                    File.Delete(temporaryPath);
-                }
-            }
-
-            return updated;
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
-        catch (IOException)
-        {
-            return null;
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return null;
-        }
-    }
-
-    private async Task<OAuthCredentials?> ReadCredentialsAsync(
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            await using var stream = File.OpenRead(credentialsPath);
-            using var document = await JsonDocument.ParseAsync(
-                stream,
-                cancellationToken: cancellationToken);
-            if (!document.RootElement.TryGetProperty(
-                    "claudeAiOauth",
-                    out var oauth) ||
-                oauth.ValueKind != JsonValueKind.Object ||
-                !TryReadString(oauth, "accessToken", out var accessToken))
-            {
-                return null;
-            }
-
-            var refreshToken = TryReadString(
-                oauth,
-                "refreshToken",
-                out var value)
-                ? value
-                : null;
-            var expiresAt = TryReadLong(oauth, "expiresAt", out var expires)
-                ? expires
-                : 0;
-            var refreshTokenExpiresAt = TryReadLong(
-                oauth,
-                "refreshTokenExpiresAt",
-                out var refreshExpires)
-                ? refreshExpires
-                : 0;
-            return new OAuthCredentials(
-                accessToken,
-                refreshToken,
-                expiresAt,
-                refreshTokenExpiresAt);
-        }
-        catch (FileNotFoundException)
-        {
-            return null;
-        }
-        catch (DirectoryNotFoundException)
-        {
-            return null;
-        }
-        catch (IOException)
-        {
-            return null;
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return null;
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
+        return await credentialStore.SaveRefreshedAsync(
+            previous,
+            updated,
+            cancellationToken);
     }
 
     private static bool TryReadString(
@@ -462,22 +374,5 @@ internal sealed class ClaudeUsageApiClient
         public bool IsSuccess =>
             (int)StatusCode >= 200 &&
             (int)StatusCode <= 299;
-    }
-
-    private sealed record OAuthCredentials(
-        string AccessToken,
-        string? RefreshToken,
-        long ExpiresAt,
-        long RefreshTokenExpiresAt)
-    {
-        public bool HasUsableAccessToken(DateTimeOffset now) =>
-            !string.IsNullOrWhiteSpace(AccessToken) &&
-            (ExpiresAt <= 0 ||
-             ExpiresAt > now.Add(AccessTokenSafetyWindow)
-                 .ToUnixTimeMilliseconds());
-
-        public bool IsRefreshTokenExpired(DateTimeOffset now) =>
-            RefreshTokenExpiresAt > 0 &&
-            RefreshTokenExpiresAt <= now.ToUnixTimeMilliseconds();
     }
 }
