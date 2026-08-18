@@ -119,6 +119,43 @@ Require(codex.AccountLabel.Contains("팀", StringComparison.Ordinal), "Codex 팀
 Require(
     codex.Meters is [{ Id: "monthly" }],
     "팀 Codex 월간 meter");
+using (var codexInitializeDocument = JsonDocument.Parse(
+           CodexAppServerUsageProvider.BuildInitializeRequest()))
+{
+    Require(
+        codexInitializeDocument.RootElement.GetProperty("method")
+            .GetString() == "initialize" &&
+        codexInitializeDocument.RootElement.GetProperty("id").GetInt32() == 1,
+        "Codex app-server initialize 요청");
+}
+using (var codexInitializedDocument = JsonDocument.Parse(
+           CodexAppServerUsageProvider.BuildInitializedNotification()))
+{
+    Require(
+        !codexInitializedDocument.RootElement.TryGetProperty("id", out _) &&
+        codexInitializedDocument.RootElement.GetProperty("method")
+            .GetString() == "initialized",
+        "Codex app-server initialized notification");
+}
+using (var codexAccountDocument = JsonDocument.Parse(
+           CodexAppServerUsageProvider.BuildAccountReadRequest()))
+{
+    Require(
+        codexAccountDocument.RootElement.GetProperty("method")
+            .GetString() == "account/read" &&
+        codexAccountDocument.RootElement.GetProperty("params")
+            .GetProperty("refreshToken").GetBoolean(),
+        "Codex account refresh 요청");
+}
+using (var codexRateLimitsDocument = JsonDocument.Parse(
+           CodexAppServerUsageProvider.BuildRateLimitsReadRequest()))
+{
+    Require(
+        codexRateLimitsDocument.RootElement.GetProperty("method")
+            .GetString() == "account/rateLimits/read" &&
+        codexRateLimitsDocument.RootElement.GetProperty("id").GetInt32() == 3,
+        "Codex rate-limit API 요청");
+}
 
 const string codexResetCreditsFixture =
     """

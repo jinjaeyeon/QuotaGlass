@@ -10,8 +10,10 @@ Codex, Claude Code, GitHub Copilot, Antigravity CLI가 시스템에서 발견되
 릴리스 메타데이터의 SHA-256 또는 SHA-512로 검증한 뒤 활성화합니다. 시스템
 CLI가 나중에 설치되면 시스템 CLI를 우선 사용합니다.
 
-현재 Codex는 공식 로컬 app-server의 `account/rateLimits/read`를 통해 실제
-rate-limit 데이터와 남은 리셋 티켓 개수, 가장 이른 티켓 기한을 읽습니다.
+현재 Codex는 공식 로컬 app-server를 초기화한 뒤 `account/read`로 인증 토큰을
+갱신하고, `account/rateLimits/read`를 통해 실제 rate-limit 데이터와 남은
+리셋 티켓 개수, 가장 이른 티켓 기한을 읽습니다. 일시적인 app-server 오류는
+제한된 retry/backoff로 재시도합니다.
 JetBrains AI는 IDE의 로컬 quota 상태에서 월간
 AI Credits와 다음 refill 시각을 읽습니다. Claude Code는 `auth status`로 구독
 로그인을 확인한 뒤, Claude Code의 OAuth 사용량 endpoint에서 5시간·주간 사용량을

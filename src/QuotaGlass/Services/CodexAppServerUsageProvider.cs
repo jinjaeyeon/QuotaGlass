@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.ComponentModel;
+using System.IO;
 using System.Text.Json;
 using QuotaGlass.Models;
 
@@ -7,6 +9,13 @@ namespace QuotaGlass.Services;
 public sealed class CodexAppServerUsageProvider(
     AgentInstallation installation) : IUsageProvider
 {
+    private const int MaxFetchAttempts = 3;
+    private static readonly TimeSpan[] RetryDelays =
+    [
+        TimeSpan.FromMilliseconds(250),
+        TimeSpan.FromMilliseconds(750)
+    ];
+
     public string ProviderId => installation.ProviderId;
     public string DisplayName => installation.DisplayName;
     public string IconText => installation.IconText;
@@ -20,23 +29,66 @@ public sealed class CodexAppServerUsageProvider(
             throw new InvalidOperationException("Codex 실행 파일을 찾을 수 없습니다.");
         }
 
-        using var process = StartAppServer(installation.ExecutablePath);
+        Exception? lastException = null;
+        for (var attempt = 0; attempt < MaxFetchAttempts; attempt++)
+        {
+            try
+            {
+                return await FetchOnceAsync(
+                    installation.ExecutablePath,
+                    cancellationToken);
+            }
+            catch (OperationCanceledException) when (
+                cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception) when (
+                attempt + 1 < MaxFetchAttempts &&
+                IsRetryable(exception))
+            {
+                lastException = exception;
+                await Task.Delay(
+                    RetryDelays[attempt],
+                    cancellationToken);
+            }
+        }
+
+        throw new InvalidOperationException(
+            "Codex 사용량 조회를 완료하지 못했습니다.",
+            lastException);
+    }
+
+    private async Task<UsageSnapshot> FetchOnceAsync(
+        string executablePath,
+        CancellationToken cancellationToken)
+    {
+        using var process = StartAppServer(executablePath);
 
         try
         {
             await WriteRequestAsync(
                 process,
-                """
-                {"id":1,"method":"initialize","params":{"clientInfo":{"name":"quota-glass","version":"0.1.0"},"capabilities":{"experimentalApi":true}}}
-                """,
+                BuildInitializeRequest(),
                 cancellationToken);
             await ReadResultAsync(process, 1, cancellationToken);
 
+            await WriteNotificationAsync(
+                process,
+                BuildInitializedNotification(),
+                cancellationToken);
+
             await WriteRequestAsync(
                 process,
-                """{"id":2,"method":"account/rateLimits/read","params":{}}""",
+                BuildAccountReadRequest(),
                 cancellationToken);
-            var result = await ReadResultAsync(process, 2, cancellationToken);
+            await ReadResultAsync(process, 2, cancellationToken);
+
+            await WriteRequestAsync(
+                process,
+                BuildRateLimitsReadRequest(),
+                cancellationToken);
+            var result = await ReadResultAsync(process, 3, cancellationToken);
 
             return ParseSnapshot(result);
         }
@@ -45,6 +97,20 @@ public sealed class CodexAppServerUsageProvider(
             await StopProcessAsync(process);
         }
     }
+
+    internal static string BuildInitializeRequest() =>
+        """
+        {"id":1,"method":"initialize","params":{"clientInfo":{"name":"quota-glass","version":"0.1.0"},"capabilities":{"experimentalApi":true}}}
+        """;
+
+    internal static string BuildInitializedNotification() =>
+        """{"method":"initialized","params":{}}""";
+
+    internal static string BuildAccountReadRequest() =>
+        """{"id":2,"method":"account/read","params":{"refreshToken":true}}""";
+
+    internal static string BuildRateLimitsReadRequest() =>
+        """{"id":3,"method":"account/rateLimits/read","params":{}}""";
 
     private static Process StartAppServer(string executablePath)
     {
@@ -66,6 +132,17 @@ public sealed class CodexAppServerUsageProvider(
     }
 
     private static async Task WriteRequestAsync(
+        Process process,
+        string json,
+        CancellationToken cancellationToken)
+    {
+        await process.StandardInput.WriteLineAsync(
+            json.AsMemory(),
+            cancellationToken);
+        await process.StandardInput.FlushAsync(cancellationToken);
+    }
+
+    private static async Task WriteNotificationAsync(
         Process process,
         string json,
         CancellationToken cancellationToken)
@@ -112,6 +189,12 @@ public sealed class CodexAppServerUsageProvider(
             return root.GetProperty("result").Clone();
         }
     }
+
+    private static bool IsRetryable(Exception exception) =>
+        exception is IOException or
+            InvalidOperationException or
+            JsonException or
+            Win32Exception;
 
     private UsageSnapshot ParseSnapshot(JsonElement result)
     {
