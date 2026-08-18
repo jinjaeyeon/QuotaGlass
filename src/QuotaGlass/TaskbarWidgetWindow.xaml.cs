@@ -96,6 +96,8 @@ public partial class TaskbarWidgetWindow : Window
         _exitApplication = exitApplication;
         _updateService = updateService;
         _restartWithUpdate = restartWithUpdate;
+        AppVersionMenuItem.Header =
+            $"QuotaGlass v{_updateService.CurrentVersion.ToString(3)}";
         _mouseHookCallback = OnLowLevelMouse;
         _selectedProviderIds = TaskbarWidgetProviderStore.LoadOrDefault();
         _positionRatio = TaskbarWidgetPlacementStore.Load();
@@ -399,19 +401,20 @@ public partial class TaskbarWidgetWindow : Window
         UpdateThemeMenuItems();
         UpdateAppUpdateMenuItem();
 
-        for (var index = WidgetContextMenu.Items.Count - 1; index >= 0; index--)
+        for (var index = ProviderVisibilityMenuItem.Items.Count - 1;
+             index >= 0;
+             index--)
         {
-            if (WidgetContextMenu.Items[index] is WpfMenuItem
+            if (ProviderVisibilityMenuItem.Items[index] is WpfMenuItem
                 {
                     Tag: ProviderMenuTag
                 })
             {
-                WidgetContextMenu.Items.RemoveAt(index);
+                ProviderVisibilityMenuItem.Items.RemoveAt(index);
             }
         }
 
-        var insertionIndex =
-            WidgetContextMenu.Items.IndexOf(ProviderVisibilityHeading) + 1;
+        var insertionIndex = ProviderVisibilityMenuItem.Items.Count;
         foreach (var provider in _viewModel.Providers
                      .GroupBy(item => item.Provider, StringComparer.Ordinal)
                      .Select(group => group.First()))
@@ -452,7 +455,7 @@ public partial class TaskbarWidgetWindow : Window
                     item.IsChecked);
                 UpdateWidgetProviders();
             };
-            WidgetContextMenu.Items.Insert(insertionIndex++, item);
+            ProviderVisibilityMenuItem.Items.Insert(insertionIndex++, item);
         }
     }
 

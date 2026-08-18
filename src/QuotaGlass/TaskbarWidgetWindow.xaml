@@ -112,27 +112,55 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="MenuItem">
-                        <Border x:Name="ItemChrome"
-                                Margin="0,1"
-                                Padding="9,7"
-                                Background="{TemplateBinding Background}"
-                                CornerRadius="7">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="25" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <ContentPresenter Width="16"
-                                                  Height="16"
-                                                  HorizontalAlignment="Left"
-                                                  VerticalAlignment="Center"
-                                                  ContentSource="Icon" />
-                                <ContentPresenter Grid.Column="1"
-                                                  VerticalAlignment="Center"
-                                                  ContentSource="Header"
-                                                  RecognizesAccessKey="True" />
-                            </Grid>
-                        </Border>
+                        <Grid>
+                            <Border x:Name="ItemChrome"
+                                    Margin="0,1"
+                                    Padding="9,7"
+                                    Background="{TemplateBinding Background}"
+                                    CornerRadius="7">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="25" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="14" />
+                                    </Grid.ColumnDefinitions>
+                                    <ContentPresenter Width="16"
+                                                      Height="16"
+                                                      HorizontalAlignment="Left"
+                                                      VerticalAlignment="Center"
+                                                      ContentSource="Icon" />
+                                    <ContentPresenter Grid.Column="1"
+                                                      VerticalAlignment="Center"
+                                                      ContentSource="Header"
+                                                      RecognizesAccessKey="True" />
+                                    <TextBlock x:Name="SubmenuArrow"
+                                               Grid.Column="2"
+                                               HorizontalAlignment="Right"
+                                               VerticalAlignment="Center"
+                                               Foreground="{DynamicResource TextBrush}"
+                                               FontSize="16"
+                                               Text="›"
+                                               Visibility="Collapsed" />
+                                </Grid>
+                            </Border>
+                            <Popup x:Name="SubMenuPopup"
+                                   AllowsTransparency="True"
+                                   Focusable="False"
+                                   IsOpen="{TemplateBinding IsSubmenuOpen}"
+                                   Placement="Right"
+                                   PlacementTarget="{Binding RelativeSource={RelativeSource TemplatedParent}}"
+                                   PopupAnimation="Fade"
+                                   StaysOpen="True">
+                                <Border Margin="5"
+                                        Padding="5"
+                                        Background="{DynamicResource ContextMenuBrush}"
+                                        BorderBrush="{DynamicResource BorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="11">
+                                    <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle" />
+                                </Border>
+                            </Popup>
+                        </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsHighlighted" Value="True">
                                 <Setter TargetName="ItemChrome"
@@ -148,6 +176,11 @@
                                 <Setter TargetName="ItemChrome"
                                         Property="Opacity"
                                         Value="0.42" />
+                            </Trigger>
+                            <Trigger Property="HasItems" Value="True">
+                                <Setter TargetName="SubmenuArrow"
+                                        Property="Visibility"
+                                        Value="Visible" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -193,6 +226,17 @@
                     <Style TargetType="Separator"
                            BasedOn="{StaticResource WidgetMenuSeparatorStyle}" />
                 </ContextMenu.Resources>
+                <MenuItem x:Name="AppVersionMenuItem"
+                          Header="QuotaGlass"
+                          IsEnabled="False">
+                    <MenuItem.Icon>
+                        <TextBlock HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   FontSize="13"
+                                   Text="ⓘ" />
+                    </MenuItem.Icon>
+                </MenuItem>
+                <Separator />
                 <MenuItem Header="전체 창 열기"
                           Click="OpenFullWindowMenuItem_Click">
                     <MenuItem.Icon>
@@ -212,9 +256,8 @@
                     </MenuItem.Icon>
                 </MenuItem>
                 <Separator />
-                <MenuItem x:Name="ProviderVisibilityHeading"
-                          Header="위젯 표시 항목"
-                          IsEnabled="False">
+                <MenuItem x:Name="ProviderVisibilityMenuItem"
+                          Header="위젯 표시 항목">
                     <MenuItem.Icon>
                         <TextBlock HorizontalAlignment="Center"
                                    VerticalAlignment="Center"
@@ -222,80 +265,78 @@
                                    Text="◉" />
                     </MenuItem.Icon>
                 </MenuItem>
-                <Separator />
-                <MenuItem x:Name="WidgetTransparencyHeading"
-                          Header="위젯 투명도"
-                          IsEnabled="False">
+                <MenuItem x:Name="WidgetAppearanceMenuItem"
+                          Header="위젯 모양">
                     <MenuItem.Icon>
                         <TextBlock HorizontalAlignment="Center"
                                    VerticalAlignment="Center"
                                    FontSize="13"
                                    Text="◌" />
                     </MenuItem.Icon>
-                </MenuItem>
-                <MenuItem x:Name="WidgetTransparency0MenuItem"
-                          Header="투명도 0% (불투명)"
-                          Tag="0"
-                          IsCheckable="True"
-                          StaysOpenOnClick="True"
-                          Click="WidgetTransparencyMenuItem_Click">
-                    <MenuItem.Icon>
-                        <TextBlock x:Name="WidgetTransparency0CheckGlyph"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"
-                                   FontSize="12" />
-                    </MenuItem.Icon>
-                </MenuItem>
-                <MenuItem x:Name="WidgetTransparency25MenuItem"
-                          Header="투명도 25%"
-                          Tag="25"
-                          IsCheckable="True"
-                          StaysOpenOnClick="True"
-                          Click="WidgetTransparencyMenuItem_Click">
-                    <MenuItem.Icon>
-                        <TextBlock x:Name="WidgetTransparency25CheckGlyph"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"
-                                   FontSize="12" />
-                    </MenuItem.Icon>
-                </MenuItem>
-                <MenuItem x:Name="WidgetTransparency50MenuItem"
-                          Header="투명도 50%"
-                          Tag="50"
-                          IsCheckable="True"
-                          StaysOpenOnClick="True"
-                          Click="WidgetTransparencyMenuItem_Click">
-                    <MenuItem.Icon>
-                        <TextBlock x:Name="WidgetTransparency50CheckGlyph"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"
-                                   FontSize="12" />
-                    </MenuItem.Icon>
-                </MenuItem>
-                <MenuItem x:Name="WidgetTransparency75MenuItem"
-                          Header="투명도 75%"
-                          Tag="75"
-                          IsCheckable="True"
-                          StaysOpenOnClick="True"
-                          Click="WidgetTransparencyMenuItem_Click">
-                    <MenuItem.Icon>
-                        <TextBlock x:Name="WidgetTransparency75CheckGlyph"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"
-                                   FontSize="12" />
-                    </MenuItem.Icon>
-                </MenuItem>
-                <MenuItem x:Name="WidgetBackgroundMenuItem"
-                          Header="위젯 배경 표시"
-                          IsCheckable="True"
-                          StaysOpenOnClick="True"
-                          Click="WidgetBackgroundMenuItem_Click">
-                    <MenuItem.Icon>
-                        <TextBlock x:Name="WidgetBackgroundCheckGlyph"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"
-                                   FontSize="12" />
-                    </MenuItem.Icon>
+                    <MenuItem x:Name="WidgetTransparency0MenuItem"
+                              Header="투명도 0% (불투명)"
+                              Tag="0"
+                              IsCheckable="True"
+                              StaysOpenOnClick="True"
+                              Click="WidgetTransparencyMenuItem_Click">
+                        <MenuItem.Icon>
+                            <TextBlock x:Name="WidgetTransparency0CheckGlyph"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       FontSize="12" />
+                        </MenuItem.Icon>
+                    </MenuItem>
+                    <MenuItem x:Name="WidgetTransparency25MenuItem"
+                              Header="투명도 25%"
+                              Tag="25"
+                              IsCheckable="True"
+                              StaysOpenOnClick="True"
+                              Click="WidgetTransparencyMenuItem_Click">
+                        <MenuItem.Icon>
+                            <TextBlock x:Name="WidgetTransparency25CheckGlyph"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       FontSize="12" />
+                        </MenuItem.Icon>
+                    </MenuItem>
+                    <MenuItem x:Name="WidgetTransparency50MenuItem"
+                              Header="투명도 50%"
+                              Tag="50"
+                              IsCheckable="True"
+                              StaysOpenOnClick="True"
+                              Click="WidgetTransparencyMenuItem_Click">
+                        <MenuItem.Icon>
+                            <TextBlock x:Name="WidgetTransparency50CheckGlyph"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       FontSize="12" />
+                        </MenuItem.Icon>
+                    </MenuItem>
+                    <MenuItem x:Name="WidgetTransparency75MenuItem"
+                              Header="투명도 75%"
+                              Tag="75"
+                              IsCheckable="True"
+                              StaysOpenOnClick="True"
+                              Click="WidgetTransparencyMenuItem_Click">
+                        <MenuItem.Icon>
+                            <TextBlock x:Name="WidgetTransparency75CheckGlyph"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       FontSize="12" />
+                        </MenuItem.Icon>
+                    </MenuItem>
+                    <MenuItem x:Name="WidgetBackgroundMenuItem"
+                              Header="위젯 배경 표시"
+                              IsCheckable="True"
+                              StaysOpenOnClick="True"
+                              Click="WidgetBackgroundMenuItem_Click">
+                        <MenuItem.Icon>
+                            <TextBlock x:Name="WidgetBackgroundCheckGlyph"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       FontSize="12" />
+                        </MenuItem.Icon>
+                    </MenuItem>
                 </MenuItem>
                 <Separator x:Name="UpdateMenuSeparator"
                            Visibility="Collapsed" />
@@ -310,94 +351,110 @@
                                    Text="↓" />
                     </MenuItem.Icon>
                 </MenuItem>
-                <Separator />
-                <MenuItem x:Name="FreeMovementMenuItem"
-                          Header="화면 전체에서 자유롭게 이동"
-                          IsCheckable="True"
-                          StaysOpenOnClick="True"
-                          Click="FreeMovementMenuItem_Click">
-                    <MenuItem.Icon>
-                        <TextBlock x:Name="FreeMovementCheckGlyph"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"
-                                   FontSize="12" />
-                    </MenuItem.Icon>
-                </MenuItem>
-                <MenuItem x:Name="VerticalLayoutMenuItem"
-                          Header="그래프 세로로 배치"
-                          IsCheckable="True"
-                          StaysOpenOnClick="True"
-                          Click="VerticalLayoutMenuItem_Click">
-                    <MenuItem.Icon>
-                        <TextBlock x:Name="VerticalLayoutCheckGlyph"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"
-                                   FontSize="12" />
-                    </MenuItem.Icon>
-                </MenuItem>
-                <MenuItem Header="위젯 위치 초기화"
-                          Click="ResetPlacementMenuItem_Click">
+                <MenuItem x:Name="WidgetLayoutMenuItem"
+                          Header="위젯 배치">
                     <MenuItem.Icon>
                         <TextBlock HorizontalAlignment="Center"
                                    VerticalAlignment="Center"
                                    FontSize="13"
                                    Text="⌖" />
                     </MenuItem.Icon>
+                    <MenuItem x:Name="FreeMovementMenuItem"
+                              Header="화면 전체에서 자유롭게 이동"
+                              IsCheckable="True"
+                              StaysOpenOnClick="True"
+                              Click="FreeMovementMenuItem_Click">
+                        <MenuItem.Icon>
+                            <TextBlock x:Name="FreeMovementCheckGlyph"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       FontSize="12" />
+                        </MenuItem.Icon>
+                    </MenuItem>
+                    <MenuItem x:Name="VerticalLayoutMenuItem"
+                              Header="그래프 세로로 배치"
+                              IsCheckable="True"
+                              StaysOpenOnClick="True"
+                              Click="VerticalLayoutMenuItem_Click">
+                        <MenuItem.Icon>
+                            <TextBlock x:Name="VerticalLayoutCheckGlyph"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       FontSize="12" />
+                        </MenuItem.Icon>
+                    </MenuItem>
+                    <MenuItem Header="위젯 위치 초기화"
+                              Click="ResetPlacementMenuItem_Click">
+                        <MenuItem.Icon>
+                            <TextBlock HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       FontSize="13"
+                                       Text="⌖" />
+                        </MenuItem.Icon>
+                    </MenuItem>
                 </MenuItem>
-                <MenuItem x:Name="StartWithWindowsMenuItem"
-                          Header="Windows 시작 시 자동 실행"
-                          IsCheckable="True"
-                          StaysOpenOnClick="True"
-                          Click="StartWithWindowsMenuItem_Click">
+                <MenuItem x:Name="AppSettingsMenuItem"
+                          Header="앱 설정">
                     <MenuItem.Icon>
-                        <TextBlock x:Name="StartWithWindowsCheckGlyph"
-                                   HorizontalAlignment="Center"
+                        <TextBlock HorizontalAlignment="Center"
                                    VerticalAlignment="Center"
-                                   FontSize="12" />
+                                   FontSize="13"
+                                   Text="⚙" />
                     </MenuItem.Icon>
+                    <MenuItem x:Name="StartWithWindowsMenuItem"
+                              Header="Windows 시작 시 자동 실행"
+                              IsCheckable="True"
+                              StaysOpenOnClick="True"
+                              Click="StartWithWindowsMenuItem_Click">
+                        <MenuItem.Icon>
+                            <TextBlock x:Name="StartWithWindowsCheckGlyph"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       FontSize="12" />
+                        </MenuItem.Icon>
+                    </MenuItem>
                 </MenuItem>
-                <Separator />
-                <MenuItem Header="테마"
-                          IsEnabled="False">
+                <MenuItem x:Name="ThemeMenuItem"
+                          Header="테마">
                     <MenuItem.Icon>
                         <TextBlock HorizontalAlignment="Center"
                                    VerticalAlignment="Center"
                                    FontSize="13"
                                    Text="◐" />
                     </MenuItem.Icon>
-                </MenuItem>
-                <MenuItem x:Name="LightThemeMenuItem"
-                          Header="Light"
-                          IsCheckable="True"
-                          Click="LightThemeMenuItem_Click">
-                    <MenuItem.Icon>
-                        <TextBlock x:Name="LightThemeCheckGlyph"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"
-                                   FontSize="12" />
-                    </MenuItem.Icon>
-                </MenuItem>
-                <MenuItem x:Name="DarkThemeMenuItem"
-                          Header="Dark"
-                          IsCheckable="True"
-                          Click="DarkThemeMenuItem_Click">
-                    <MenuItem.Icon>
-                        <TextBlock x:Name="DarkThemeCheckGlyph"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"
-                                   FontSize="12" />
-                    </MenuItem.Icon>
-                </MenuItem>
-                <MenuItem x:Name="SystemThemeMenuItem"
-                          Header="시스템"
-                          IsCheckable="True"
-                          Click="SystemThemeMenuItem_Click">
-                    <MenuItem.Icon>
-                        <TextBlock x:Name="SystemThemeCheckGlyph"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"
-                                   FontSize="12" />
-                    </MenuItem.Icon>
+                    <MenuItem x:Name="LightThemeMenuItem"
+                              Header="Light"
+                              IsCheckable="True"
+                              Click="LightThemeMenuItem_Click">
+                        <MenuItem.Icon>
+                            <TextBlock x:Name="LightThemeCheckGlyph"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       FontSize="12" />
+                        </MenuItem.Icon>
+                    </MenuItem>
+                    <MenuItem x:Name="DarkThemeMenuItem"
+                              Header="Dark"
+                              IsCheckable="True"
+                              Click="DarkThemeMenuItem_Click">
+                        <MenuItem.Icon>
+                            <TextBlock x:Name="DarkThemeCheckGlyph"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       FontSize="12" />
+                        </MenuItem.Icon>
+                    </MenuItem>
+                    <MenuItem x:Name="SystemThemeMenuItem"
+                              Header="시스템"
+                              IsCheckable="True"
+                              Click="SystemThemeMenuItem_Click">
+                        <MenuItem.Icon>
+                            <TextBlock x:Name="SystemThemeCheckGlyph"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       FontSize="12" />
+                        </MenuItem.Icon>
+                    </MenuItem>
                 </MenuItem>
                 <Separator />
                 <MenuItem Header="종료"
