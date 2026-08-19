@@ -163,7 +163,8 @@ public sealed class ClaudeCodeUsageProvider : IUsageProvider
         {
             if (isStatusLineCacheFresh &&
                 cachedMeters.Count > 0 &&
-                cachedMeters.All(meter => meter.ResetsAt > now))
+                cachedMeters.All(meter =>
+                    meter.IsReset || meter.ResetsAt > now))
             {
                 return new UsageSnapshot(
                     ProviderId,
@@ -221,7 +222,7 @@ public sealed class ClaudeCodeUsageProvider : IUsageProvider
         DateTimeOffset now)
     {
         var result = freshMeters
-            .Where(meter => meter.ResetsAt > now)
+            .Where(meter => meter.IsReset || meter.ResetsAt > now)
             .ToDictionary(meter => meter.Id, StringComparer.Ordinal);
 
         foreach (var cached in cachedMeters)
@@ -236,7 +237,7 @@ public sealed class ClaudeCodeUsageProvider : IUsageProvider
                 continue;
             }
 
-            if (cached.ResetsAt > now)
+            if (cached.IsReset || cached.ResetsAt > now)
             {
                 result[cached.Id] = cached;
             }

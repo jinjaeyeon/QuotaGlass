@@ -356,6 +356,71 @@ Require(
         claudeApiMeters.Single(item => item.Label == "주간").RemainingRatio,
         0.588),
     "Claude usage API 주간 잔량");
+var claudeFullQuotaFixture =
+    """
+    {
+      "five_hour": {
+        "utilization": 0,
+        "resets_at": null
+      },
+      "seven_day": {
+        "utilization": 41.2,
+        "resets_at": "2026-08-22T16:00:00Z"
+      }
+    }
+    """;
+var claudeFullQuotaMeters = ClaudeRateLimitParser.Parse(
+    claudeFullQuotaFixture,
+    now);
+var claudeFullQuotaFiveHour = claudeFullQuotaMeters.Single(
+    item => item.Label == "5시간");
+Require(
+    claudeFullQuotaFiveHour.IsReset &&
+    Approximately(claudeFullQuotaFiveHour.RemainingRatio, 1),
+    "Claude 잔여 100% 5시간 meter 보존");
+var claudeFullStatusLineFixture =
+    """
+    {
+      "rate_limits": {
+        "five_hour": {
+          "used_percentage": 0,
+          "resets_at": null
+        },
+        "seven_day": {
+          "used_percentage": 12,
+          "resets_at": 1787450400
+        }
+      }
+    }
+    """;
+Require(
+    ClaudeRateLimitParser.Parse(
+            claudeFullStatusLineFixture,
+            now)
+        .Any(item =>
+            item.Label == "5시간" &&
+            item.IsReset &&
+            Approximately(item.RemainingRatio, 1)),
+    "Claude status-line 잔여 100% 5시간 meter 보존");
+var claudeNullWindowFixture =
+    """
+    {
+      "five_hour": null,
+      "seven_day": {
+        "utilization": 12,
+        "resets_at": "2026-08-22T16:00:00Z"
+      }
+    }
+    """;
+Require(
+    ClaudeRateLimitParser.Parse(
+            claudeNullWindowFixture,
+            now)
+        .Any(item =>
+            item.Label == "5시간" &&
+            item.IsReset &&
+            Approximately(item.RemainingRatio, 1)),
+    "Claude null 5시간 window 보존");
 await RunClaudeUsageApiClientTests();
 await RunClaudeCredentialFallbackTests();
 await RunClaudeDesktopCredentialStoreTests();

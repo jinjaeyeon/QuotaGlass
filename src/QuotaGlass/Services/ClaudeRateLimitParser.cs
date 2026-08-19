@@ -6,7 +6,9 @@ namespace QuotaGlass.Services;
 
 public static class ClaudeRateLimitParser
 {
-    public static IReadOnlyList<UsageMeter> Parse(string json)
+    public static IReadOnlyList<UsageMeter> Parse(
+        string json,
+        DateTimeOffset? observedAt = null)
     {
         using var document = JsonDocument.Parse(json);
         var root = document.RootElement;
@@ -15,15 +17,20 @@ public static class ClaudeRateLimitParser
         {
             return ParseWindows(
                 rateLimits,
-                "used_percentage");
+                "used_percentage",
+                observedAt ?? DateTimeOffset.Now);
         }
 
-        return ParseWindows(root, "utilization");
+        return ParseWindows(
+            root,
+            "utilization",
+            observedAt ?? DateTimeOffset.Now);
     }
 
     private static IReadOnlyList<UsageMeter> ParseWindows(
         JsonElement windows,
-        string utilizationPropertyName)
+        string utilizationPropertyName,
+        DateTimeOffset observedAt)
     {
         var meters = new List<UsageMeter>();
         AddWindow(
@@ -32,14 +39,16 @@ public static class ClaudeRateLimitParser
             "five_hour",
             "5시간",
             TimeSpan.FromHours(5),
-            utilizationPropertyName);
+            utilizationPropertyName,
+            observedAt);
         AddWindow(
             meters,
             windows,
             "seven_day",
             "주간",
             TimeSpan.FromDays(7),
-            utilizationPropertyName);
+            utilizationPropertyName,
+            observedAt);
 
         return meters;
     }
@@ -50,21 +59,50 @@ public static class ClaudeRateLimitParser
         string propertyName,
         string label,
         TimeSpan duration,
-        string utilizationPropertyName)
+        string utilizationPropertyName,
+        DateTimeOffset observedAt)
     {
-        if (!windows.TryGetProperty(propertyName, out var window) ||
-            window.ValueKind != JsonValueKind.Object ||
-            !window.TryGetProperty(
-                utilizationPropertyName,
-                out var utilizationElement) ||
-            !TryReadDouble(utilizationElement, out var utilization) ||
-            !window.TryGetProperty("resets_at", out var resetElement) ||
-            !TryReadResetAt(resetElement, out var resetsAt))
+        if (!windows.TryGetProperty(propertyName, out var window))
         {
             return;
         }
 
-        var used = Math.Clamp(utilization, 0, 100);
+        double used;
+        DateTimeOffset resetsAt;
+        var isReset = false;
+        if (window.ValueKind == JsonValueKind.Null)
+        {
+            used = 0;
+            resetsAt = observedAt;
+            isReset = true;
+        }
+        else
+        {
+            if (window.ValueKind != JsonValueKind.Object ||
+                !window.TryGetProperty(
+                    utilizationPropertyName,
+                    out var utilizationElement) ||
+                !TryReadDouble(utilizationElement, out var utilization))
+            {
+                return;
+            }
+
+            used = Math.Clamp(utilization, 0, 100);
+            if (!window.TryGetProperty("resets_at", out var resetElement) ||
+                !TryReadResetAt(resetElement, out resetsAt))
+            {
+                // Claude omits the reset timestamp when a window is
+                // completely unused. Keep the full-remaining meter instead
+                // of dropping the 5H/weekly graph from both views.
+                if (used > 0)
+                {
+                    return;
+                }
+
+                resetsAt = observedAt;
+                isReset = true;
+            }
+        }
 
         meters.Add(
             new UsageMeter(
@@ -74,7 +112,8 @@ public static class ClaudeRateLimitParser
                 100,
                 "percent",
                 resetsAt - duration,
-                resetsAt));
+                resetsAt,
+                isReset));
     }
 
     private static bool TryReadDouble(
