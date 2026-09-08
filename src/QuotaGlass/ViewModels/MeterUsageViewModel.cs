@@ -12,6 +12,7 @@ public sealed class MeterUsageViewModel
         RemainingRatio = meter.RemainingRatio;
         IsReset = meter.IsReset;
         ResetsAt = meter.ResetsAt;
+        ResetPeriod = meter.ResetsAt - meter.WindowStart;
         SafeRemainingRatio = IsReset
             ? 1
             : meter.RemainingTimeRatio(now);
@@ -42,6 +43,7 @@ public sealed class MeterUsageViewModel
     public bool IsWatch { get; }
     public bool IsReset { get; }
     public DateTimeOffset ResetsAt { get; }
+    public TimeSpan ResetPeriod { get; }
     public string RemainingText { get; }
     public string CompactRemainingText { get; }
     public string RemainingWithResetText { get; }

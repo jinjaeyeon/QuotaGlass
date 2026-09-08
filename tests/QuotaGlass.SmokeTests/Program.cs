@@ -83,6 +83,20 @@ Require(
 Require(
     snapshots.Single(snapshot => snapshot.Provider == "claude-code").Meters.Count == 2,
     "Claude Code 5시간/주간 meter");
+var claudeViewModel = providerViewModels.Single(provider =>
+    provider.Provider == "claude-code");
+Require(
+    claudeViewModel.PrimaryMeter?.Label == "주간" &&
+    claudeViewModel.SecondaryMeters.Single().Label == "5시간",
+    "메인 창은 긴 리셋 주기를 큰 meter로 표시");
+Require(
+    claudeViewModel.CompactMeters.Select(meter => meter.Label)
+        .SequenceEqual(["5시간", "주간"]),
+    "위젯은 긴 리셋 주기를 아래에 표시");
+Require(
+    claudeViewModel.CompactToolTip.IndexOf("5시간", StringComparison.Ordinal) <
+    claudeViewModel.CompactToolTip.IndexOf("주간", StringComparison.Ordinal),
+    "위젯 tooltip도 짧은 리셋 주기부터 표시");
 var lastKnownClaude = snapshots.Single(snapshot =>
     snapshot.Provider == "claude-code");
 var transientClaudeFailure = new UsageSnapshot(

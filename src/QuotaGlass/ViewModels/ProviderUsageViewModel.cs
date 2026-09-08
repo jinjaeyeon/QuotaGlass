@@ -18,14 +18,19 @@ public sealed class ProviderUsageViewModel
             snapshot.ResetCredits,
             now);
 
-        Meters = snapshot.Meters
+        var meters = snapshot.Meters
             .Select(meter => new MeterUsageViewModel(meter, now))
-            .OrderBy(meter => meter.PaceDelta)
             .ToArray();
 
+        Meters = meters
+            .OrderByDescending(meter => meter.ResetPeriod)
+            .ToArray();
         PrimaryMeter = Meters.FirstOrDefault();
         SecondaryMeters = Meters.Skip(1).ToArray();
-        CompactMeters = Meters.Take(2).ToArray();
+        CompactMeters = meters
+            .OrderBy(meter => meter.ResetPeriod)
+            .Take(2)
+            .ToArray();
         CompactToolTip = BuildCompactToolTip();
     }
 
@@ -54,9 +59,11 @@ public sealed class ProviderUsageViewModel
             return $"{DisplayName}: {StatusMessage}";
         }
 
-        var meters = Meters.Select(meter =>
-            $"{meter.Label} {meter.RemainingWithResetText}" +
-            (meter.IsWarning ? " ⚠" : string.Empty));
+        var meters = Meters
+            .OrderBy(meter => meter.ResetPeriod)
+            .Select(meter =>
+                $"{meter.Label} {meter.RemainingWithResetText}" +
+                (meter.IsWarning ? " ⚠" : string.Empty));
         var resetCredits = HasResetCreditSummary
             ? $"\n{ResetCreditSummaryText}"
             : string.Empty;
