@@ -116,7 +116,9 @@ public sealed class AppUpdateService : IDisposable
         _periodicCheck ??= RunPeriodicChecksAsync(_lifetime.Token);
     }
 
-    public async Task CheckForUpdateAsync(CancellationToken cancellationToken)
+    public async Task CheckForUpdateAsync(
+        CancellationToken cancellationToken,
+        bool throwOnError = false)
     {
         if (!CanSelfUpdate)
         {
@@ -145,6 +147,10 @@ public sealed class AppUpdateService : IDisposable
         catch
         {
             // 업데이트 확인 실패는 앱 사용을 방해하지 않습니다.
+            if (throwOnError)
+            {
+                throw;
+            }
         }
         finally
         {

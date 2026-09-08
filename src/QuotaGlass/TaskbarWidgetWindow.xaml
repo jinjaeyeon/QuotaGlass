@@ -255,6 +255,16 @@
                                    Text="↻" />
                     </MenuItem.Icon>
                 </MenuItem>
+                <MenuItem x:Name="CheckForUpdatesMenuItem"
+                          Header="업데이트 확인"
+                          Click="CheckForUpdatesMenuItem_Click">
+                    <MenuItem.Icon>
+                        <TextBlock HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   FontSize="14"
+                                   Text="⟳" />
+                    </MenuItem.Icon>
+                </MenuItem>
                 <Separator />
                 <MenuItem x:Name="ProviderVisibilityMenuItem"
                           Header="위젯 표시 항목">

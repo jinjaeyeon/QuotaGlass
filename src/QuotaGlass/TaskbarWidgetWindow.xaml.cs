@@ -150,6 +150,7 @@ public partial class TaskbarWidgetWindow : Window
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
         _updateService.StateChanged += OnUpdateStateChanged;
         UpdateWidgetProviders();
+        UpdateCheckForUpdatesMenuItem();
     }
 
     public void CloseForExit()
@@ -378,6 +379,51 @@ public partial class TaskbarWidgetWindow : Window
         RoutedEventArgs e) =>
         _viewModel.RefreshCommand.Execute(null);
 
+    private async void CheckForUpdatesMenuItem_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        if (!_updateService.CanSelfUpdate ||
+            _updateService.IsChecking ||
+            _updateService.IsPreparingUpdate)
+        {
+            return;
+        }
+
+        CheckForUpdatesMenuItem.IsEnabled = false;
+        CheckForUpdatesMenuItem.Header = "업데이트 확인 중…";
+        try
+        {
+            await _updateService.CheckForUpdateAsync(
+                CancellationToken.None,
+                throwOnError: true);
+
+            if (_updateService.AvailableUpdate is null)
+            {
+                System.Windows.MessageBox.Show(
+                    this,
+                    "현재 최신 버전입니다.",
+                    "QuotaGlass 업데이트",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+        }
+        catch (Exception exception)
+        {
+            System.Windows.MessageBox.Show(
+                this,
+                $"업데이트 확인에 실패했습니다.\n{exception.Message}",
+                "QuotaGlass 업데이트",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+        finally
+        {
+            UpdateCheckForUpdatesMenuItem();
+            UpdateAppUpdateMenuItem();
+        }
+    }
+
     private void AntiAliasingMenuItem_Click(
         object sender,
         RoutedEventArgs e) =>
@@ -439,7 +485,7 @@ public partial class TaskbarWidgetWindow : Window
         UpdateResourceMetricsMenuItem();
         UpdateAntiAliasingMenuItem();
         UpdateThemeMenuItems();
-        UpdateAppUpdateMenuItem();
+        UpdateUpdateMenuItems();
 
         for (var index = ProviderVisibilityMenuItem.Items.Count - 1;
              index >= 0;
@@ -521,11 +567,28 @@ public partial class TaskbarWidgetWindow : Window
 
         if (!Dispatcher.CheckAccess())
         {
-            Dispatcher.BeginInvoke(UpdateAppUpdateMenuItem);
+            Dispatcher.BeginInvoke(UpdateUpdateMenuItems);
             return;
         }
 
+        UpdateUpdateMenuItems();
+    }
+
+    private void UpdateUpdateMenuItems()
+    {
+        UpdateCheckForUpdatesMenuItem();
         UpdateAppUpdateMenuItem();
+    }
+
+    private void UpdateCheckForUpdatesMenuItem()
+    {
+        CheckForUpdatesMenuItem.IsEnabled =
+            _updateService.CanSelfUpdate &&
+            !_updateService.IsChecking &&
+            !_updateService.IsPreparingUpdate;
+        CheckForUpdatesMenuItem.Header = _updateService.IsChecking
+            ? "업데이트 확인 중…"
+            : "업데이트 확인";
     }
 
     private void StartOutsideClickMonitor()
