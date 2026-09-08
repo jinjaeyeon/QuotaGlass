@@ -23,6 +23,55 @@ Require(Approximately(meter.RemainingRatio, 0.30), "남은 사용량 비율 계�
 Require(Approximately(meter.RemainingTimeRatio(now), 0.60), "남은 시간 비율 계산");
 Require(Approximately(meter.PaceDelta(now), -0.30), "소진 속도 차이 계산");
 
+Require(
+    Approximately(
+        SystemResourceMonitor.CalculateCpuUsage(
+            100,
+            200,
+            300,
+            110,
+            240,
+            360),
+        90),
+    "시스템 CPU 사용량 차이 계산");
+var resourceUsage = new SystemResourceUsageViewModel();
+resourceUsage.Apply(
+    new SystemResourceSnapshot(
+        now,
+        42.5,
+        61.2,
+        8_000,
+        16_000));
+Require(
+    resourceUsage.CpuUsageText == "43%" &&
+    resourceUsage.MemoryUsageText == "61%" &&
+    resourceUsage.CpuHistory.Count == 1 &&
+    resourceUsage.MemoryHistory.Count == 1,
+    "시스템 리소스 표시와 첫 이력 샘플");
+for (var sample = 0; sample < SystemResourceUsageViewModel.MaxHistorySamples + 3; sample++)
+{
+    resourceUsage.Apply(
+        new SystemResourceSnapshot(
+            now.AddSeconds(sample + 1),
+            sample,
+            sample,
+            1_000,
+            2_000));
+}
+Require(
+    resourceUsage.CpuHistory.Count == SystemResourceUsageViewModel.MaxHistorySamples &&
+    resourceUsage.CpuHistory[0] == 3 &&
+    resourceUsage.CpuHistory[^1] == 26,
+    "시스템 리소스 이력 길이 제한");
+var resourceMonitor = new SystemResourceMonitor();
+var firstResourceSnapshot = resourceMonitor.Sample(now);
+var secondResourceSnapshot = resourceMonitor.Sample(now.AddSeconds(5));
+Require(
+    firstResourceSnapshot.MemoryUsagePercent is >= 0 and <= 100 &&
+    firstResourceSnapshot.TotalMemoryBytes > 0 &&
+    secondResourceSnapshot.CpuUsagePercent is >= 0 and <= 100,
+    "Windows 시스템 리소스 샘플 수집");
+
 var viewModel = new MeterUsageViewModel(meter, now);
 Require(viewModel.IsWarning, "5%p 초과 소진 경고");
 Require(viewModel.StatusText.Contains("30％p", StringComparison.Ordinal), "경고 차이 표시");
@@ -1022,6 +1071,9 @@ void RunTaskbarWidgetSettingsTests()
     var monitorSettingsPath = Path.Combine(
         root,
         "widget-monitor-position.txt");
+    var resourceMetricsSettingsPath = Path.Combine(
+        root,
+        "widget-resource-metrics.txt");
 
     try
     {
@@ -1034,6 +1086,11 @@ void RunTaskbarWidgetSettingsTests()
             TaskbarWidgetSettingsStore.LoadBackgroundEnabled(
                 backgroundSettingsPath),
             "위젯 배경 기본값");
+
+        Require(
+            !TaskbarWidgetSettingsStore.LoadResourceMetricsEnabled(
+                resourceMetricsSettingsPath),
+            "CPU/메모리 그래프 기본 숨김");
 
         TaskbarWidgetSettingsStore.SaveTransparencyPercent(settingsPath, 50);
         Require(
@@ -1066,6 +1123,28 @@ void RunTaskbarWidgetSettingsTests()
             TaskbarWidgetSettingsStore.LoadBackgroundEnabled(
                 backgroundSettingsPath),
             "위젯 배경 설정 오류 시 기본값");
+
+        TaskbarWidgetSettingsStore.SaveResourceMetricsEnabled(
+            resourceMetricsSettingsPath,
+            true);
+        Require(
+            TaskbarWidgetSettingsStore.LoadResourceMetricsEnabled(
+                resourceMetricsSettingsPath),
+            "CPU/메모리 그래프 표시 상태 저장 및 복원");
+
+        TaskbarWidgetSettingsStore.SaveResourceMetricsEnabled(
+            resourceMetricsSettingsPath,
+            false);
+        Require(
+            !TaskbarWidgetSettingsStore.LoadResourceMetricsEnabled(
+                resourceMetricsSettingsPath),
+            "CPU/메모리 그래프 숨김 상태 저장 및 복원");
+
+        File.WriteAllText(resourceMetricsSettingsPath, "invalid");
+        Require(
+            !TaskbarWidgetSettingsStore.LoadResourceMetricsEnabled(
+                resourceMetricsSettingsPath),
+            "CPU/메모리 그래프 설정 오류 시 기본값");
 
         TaskbarWidgetPlacementStore.SaveTaskbarMonitorPosition(
             monitorSettingsPath,

@@ -264,6 +264,18 @@
                                    FontSize="12"
                                    Text="◉" />
                     </MenuItem.Icon>
+                    <MenuItem x:Name="SystemResourceMetricsMenuItem"
+                              Header="CPU/메모리 그래프 표시"
+                              IsCheckable="True"
+                              StaysOpenOnClick="True"
+                              Click="SystemResourceMetricsMenuItem_Click">
+                        <MenuItem.Icon>
+                            <TextBlock x:Name="SystemResourceMetricsCheckGlyph"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       FontSize="12" />
+                        </MenuItem.Icon>
+                    </MenuItem>
                 </MenuItem>
                 <MenuItem x:Name="WidgetAppearanceMenuItem"
                           Header="위젯 모양">
@@ -483,9 +495,11 @@
             </ContextMenu>
         </Border.ContextMenu>
         <Grid>
-            <ItemsControl x:Name="WidgetProvidersControl"
-                          ItemsSource="{Binding WidgetProviders, ElementName=WidgetRoot}"
-                          ItemsPanel="{StaticResource HorizontalWidgetProvidersPanel}">
+            <StackPanel x:Name="WidgetContentPanel"
+                        Orientation="Horizontal">
+                <ItemsControl x:Name="WidgetProvidersControl"
+                              ItemsSource="{Binding WidgetProviders, ElementName=WidgetRoot}"
+                              ItemsPanel="{StaticResource HorizontalWidgetProvidersPanel}">
                 <ItemsControl.Style>
                     <Style TargetType="ItemsControl">
                         <Setter Property="Visibility" Value="Visible" />
@@ -629,32 +643,77 @@
                         </Grid>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
-            </ItemsControl>
+                </ItemsControl>
 
-            <StackPanel HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        Orientation="Horizontal">
-                <StackPanel.Style>
-                    <Style TargetType="StackPanel">
-                        <Setter Property="Visibility"
-                                Value="Collapsed" />
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding WidgetProviders.Count, ElementName=WidgetRoot}"
-                                         Value="0">
-                                <Setter Property="Visibility"
-                                        Value="Visible" />
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </StackPanel.Style>
-                <TextBlock Foreground="{DynamicResource TextBrush}"
-                           FontSize="10"
-                           FontWeight="SemiBold"
-                           Text="QG" />
-                <TextBlock Margin="5,0,0,0"
-                           Foreground="{DynamicResource MutedTextBrush}"
-                           FontSize="9"
-                           Text="…" />
+                <StackPanel x:Name="ResourceMetricsPanel"
+                            Margin="0"
+                            Orientation="Horizontal"
+                            Visibility="Collapsed">
+                    <Border x:Name="ResourceMetricsBorder"
+                            Width="86"
+                            Height="34"
+                            VerticalAlignment="Center"
+                            Padding="5,2"
+                            Background="{DynamicResource SurfaceBrush}"
+                            BorderBrush="{DynamicResource BorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="6"
+                            ToolTip="{Binding SystemResources.ResourceToolTip, ElementName=WidgetRoot}">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Margin"
+                                        Value="0,0,8,0" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsVerticalLayout, ElementName=WidgetRoot}"
+                                                 Value="True">
+                                        <Setter Property="Margin"
+                                                Value="0,0,0,5" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="13" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <StackPanel Orientation="Horizontal">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Foreground="{DynamicResource SafeBrush}"
+                                               FontSize="8"
+                                               FontWeight="SemiBold"
+                                               Text="C" />
+                                    <TextBlock Margin="1,0,0,0"
+                                               Foreground="{DynamicResource TextBrush}"
+                                               FontSize="8"
+                                               FontWeight="SemiBold"
+                                               Text="{Binding SystemResources.CpuUsageText, ElementName=WidgetRoot}" />
+                                </StackPanel>
+                                <StackPanel Margin="5,0,0,0"
+                                            Orientation="Horizontal">
+                                    <TextBlock Foreground="{DynamicResource WarningBrush}"
+                                               FontSize="8"
+                                               FontWeight="SemiBold"
+                                               Text="M" />
+                                    <TextBlock Margin="1,0,0,0"
+                                               Foreground="{DynamicResource TextBrush}"
+                                               FontSize="8"
+                                               FontWeight="SemiBold"
+                                               Text="{Binding SystemResources.MemoryUsageText, ElementName=WidgetRoot}" />
+                                </StackPanel>
+                            </StackPanel>
+                            <controls:UsageSparkline Grid.Row="1"
+                                                     Margin="0,1,0,0"
+                                                     BaselineBrush="{DynamicResource TrackBrush}"
+                                                     IsHitTestVisible="False"
+                                                     SecondaryStroke="{DynamicResource WarningBrush}"
+                                                     SecondaryValues="{Binding SystemResources.MemoryHistory, ElementName=WidgetRoot}"
+                                                     Stroke="{DynamicResource SafeBrush}"
+                                                     StrokeThickness="1.4"
+                                                     Values="{Binding SystemResources.CpuHistory, ElementName=WidgetRoot}" />
+                        </Grid>
+                    </Border>
+                </StackPanel>
             </StackPanel>
 
             <Border x:Name="UpdateStatusBanner"

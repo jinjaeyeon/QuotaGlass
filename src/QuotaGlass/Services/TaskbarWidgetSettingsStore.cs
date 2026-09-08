@@ -30,6 +30,11 @@ internal static class TaskbarWidgetSettingsStore
             Environment.SpecialFolder.LocalApplicationData),
         "QuotaGlass",
         "taskbar-widget-anti-aliasing.txt");
+    private static readonly string ResourceMetricsPath = Path.Combine(
+        Environment.GetFolderPath(
+            Environment.SpecialFolder.LocalApplicationData),
+        "QuotaGlass",
+        "taskbar-widget-resource-metrics.txt");
 
     public static bool LoadFreeMovementEnabled()
     {
@@ -235,6 +240,52 @@ internal static class TaskbarWidgetSettingsStore
             }
 
             File.WriteAllText(AntiAliasingPath, enabled.ToString());
+        }
+        catch
+        {
+            // A read-only profile must not prevent the widget from working.
+        }
+    }
+
+    public static bool LoadResourceMetricsEnabled() =>
+        LoadResourceMetricsEnabled(ResourceMetricsPath);
+
+    internal static bool LoadResourceMetricsEnabled(string settingsPath)
+    {
+        try
+        {
+            if (!File.Exists(settingsPath))
+            {
+                return false;
+            }
+
+            return bool.TryParse(
+                       File.ReadAllText(settingsPath),
+                       out var enabled) &&
+                   enabled;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public static void SaveResourceMetricsEnabled(bool enabled) =>
+        SaveResourceMetricsEnabled(ResourceMetricsPath, enabled);
+
+    internal static void SaveResourceMetricsEnabled(
+        string settingsPath,
+        bool enabled)
+    {
+        try
+        {
+            var directory = Path.GetDirectoryName(settingsPath);
+            if (!string.IsNullOrWhiteSpace(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            File.WriteAllText(settingsPath, enabled.ToString());
         }
         catch
         {

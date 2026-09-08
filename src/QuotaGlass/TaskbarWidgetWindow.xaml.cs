@@ -34,6 +34,8 @@ public partial class TaskbarWidgetWindow : Window
     private const uint GwHwndNext = 2;
     private const uint MonitorDefaultToNearest = 2;
     private const double DefaultWidgetHeight = 44;
+    private const double CompactResourceMetricsWidth = 86;
+    private const double VerticalProviderGraphWidth = 120;
     private const int MaxWidgetTransparencyPercent = 75;
     private static readonly nint HwndTopmost = new(-1);
     private readonly Action _openFullWindow;
@@ -41,7 +43,9 @@ public partial class TaskbarWidgetWindow : Window
     private readonly AppUpdateService _updateService;
     private readonly Action<PreparedAppUpdate> _restartWithUpdate;
     private readonly MainViewModel _viewModel;
+    private readonly SystemResourceMonitor _resourceMonitor = new();
     private readonly DispatcherTimer _positionTimer;
+    private readonly DispatcherTimer _resourceTimer;
     private readonly HashSet<string> _selectedProviderIds;
     private readonly LowLevelMouseProc _mouseHookCallback;
     private double? _positionRatio;
@@ -55,6 +59,7 @@ public partial class TaskbarWidgetWindow : Window
     private bool _verticalLayoutEnabled;
     private int _widgetTransparencyPercent;
     private bool _widgetBackgroundEnabled;
+    private bool _resourceMetricsEnabled;
     private bool _antiAliasingEnabled;
     private TaskbarWidgetPlacementStore.ScreenPosition? _screenPosition;
     private TaskbarWidgetPlacementStore.MonitorPosition?
@@ -69,6 +74,8 @@ public partial class TaskbarWidgetWindow : Window
     {
         get;
     } = [];
+
+    public SystemResourceUsageViewModel SystemResources { get; } = new();
 
     public static readonly DependencyProperty IsVerticalLayoutProperty =
         DependencyProperty.Register(
@@ -117,16 +124,24 @@ public partial class TaskbarWidgetWindow : Window
                 MaxWidgetTransparencyPercent);
         _widgetBackgroundEnabled =
             TaskbarWidgetSettingsStore.LoadBackgroundEnabled();
+        _resourceMetricsEnabled =
+            TaskbarWidgetSettingsStore.LoadResourceMetricsEnabled();
         _antiAliasingEnabled =
             TaskbarWidgetSettingsStore.LoadAntiAliasingEnabled();
         ApplyRenderingSettings();
         ApplyWidgetTransparency();
         ApplyWidgetBackground();
+        ApplyResourceMetricsVisibility();
         _positionTimer = new DispatcherTimer
         {
             Interval = TimeSpan.FromMilliseconds(500)
         };
         _positionTimer.Tick += OnPositionTimerTick;
+        _resourceTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(5)
+        };
+        _resourceTimer.Tick += OnResourceTimerTick;
 
         SourceInitialized += OnSourceInitialized;
         Loaded += OnLoaded;
@@ -191,6 +206,8 @@ public partial class TaskbarWidgetWindow : Window
     {
         PositionWidget();
         _positionTimer.Start();
+        SampleSystemResources();
+        _resourceTimer.Start();
     }
 
     private void OnSizeChanged(object sender, SizeChangedEventArgs e) =>
@@ -419,6 +436,7 @@ public partial class TaskbarWidgetWindow : Window
         UpdateVerticalLayoutMenuItem();
         UpdateWidgetTransparencyMenuItems();
         UpdateWidgetBackgroundMenuItem();
+        UpdateResourceMetricsMenuItem();
         UpdateAntiAliasingMenuItem();
         UpdateThemeMenuItems();
         UpdateAppUpdateMenuItem();
@@ -611,6 +629,26 @@ public partial class TaskbarWidgetWindow : Window
         }
     }
 
+    private void OnResourceTimerTick(object? sender, EventArgs e) =>
+        SampleSystemResources();
+
+    private void SampleSystemResources()
+    {
+        if (_isClosed)
+        {
+            return;
+        }
+
+        try
+        {
+            SystemResources.Apply(_resourceMonitor.Sample());
+        }
+        catch
+        {
+            // Resource monitoring must not prevent the widget from opening.
+        }
+    }
+
     private static bool IsInsideBounds(
         NativePoint point,
         NativeRect bounds) =>
@@ -657,6 +695,11 @@ public partial class TaskbarWidgetWindow : Window
         object sender,
         RoutedEventArgs e) =>
         SetWidgetBackgroundEnabled(WidgetBackgroundMenuItem.IsChecked);
+
+    private void SystemResourceMetricsMenuItem_Click(
+        object sender,
+        RoutedEventArgs e) =>
+        SetResourceMetricsEnabled(SystemResourceMetricsMenuItem.IsChecked);
 
     private void StartWithWindowsMenuItem_Click(
         object sender,
@@ -1483,6 +1526,35 @@ public partial class TaskbarWidgetWindow : Window
             : string.Empty;
     }
 
+    private void SetResourceMetricsEnabled(bool enabled)
+    {
+        if (_resourceMetricsEnabled == enabled)
+        {
+            UpdateResourceMetricsMenuItem();
+            return;
+        }
+
+        _resourceMetricsEnabled = enabled;
+        TaskbarWidgetSettingsStore.SaveResourceMetricsEnabled(enabled);
+        ApplyResourceMetricsVisibility();
+        ApplyWidgetLayout();
+        PositionWidget();
+        UpdateResourceMetricsMenuItem();
+    }
+
+    private void ApplyResourceMetricsVisibility() =>
+        ResourceMetricsPanel.Visibility = _resourceMetricsEnabled
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+    private void UpdateResourceMetricsMenuItem()
+    {
+        SystemResourceMetricsMenuItem.IsChecked = _resourceMetricsEnabled;
+        SystemResourceMetricsCheckGlyph.Text = _resourceMetricsEnabled
+            ? "✓"
+            : string.Empty;
+    }
+
     private void UpdateAntiAliasingMenuItem()
     {
         AntiAliasingMenuItem.IsChecked = _antiAliasingEnabled;
@@ -1525,13 +1597,23 @@ public partial class TaskbarWidgetWindow : Window
     {
         var useVerticalLayout =
             _freeMovementEnabled &&
-            _verticalLayoutEnabled &&
-            WidgetProviders.Count > 0;
+            _verticalLayoutEnabled;
         WidgetProvidersControl.ItemsPanel =
             (System.Windows.Controls.ItemsPanelTemplate)FindResource(
                 useVerticalLayout
                     ? "VerticalWidgetProvidersPanel"
                     : "HorizontalWidgetProvidersPanel");
+        WidgetContentPanel.Orientation = useVerticalLayout
+            ? System.Windows.Controls.Orientation.Vertical
+            : System.Windows.Controls.Orientation.Horizontal;
+        ResourceMetricsPanel.Orientation = useVerticalLayout
+            ? System.Windows.Controls.Orientation.Vertical
+            : System.Windows.Controls.Orientation.Horizontal;
+        ResourceMetricsBorder.Width = useVerticalLayout
+            ? VerticalProviderGraphWidth
+            : CompactResourceMetricsWidth;
+        ResourceMetricsBorder.HorizontalAlignment =
+            System.Windows.HorizontalAlignment.Left;
         IsVerticalLayout = useVerticalLayout;
         WidgetChrome.Height = useVerticalLayout
             ? double.NaN
@@ -1626,6 +1708,8 @@ public partial class TaskbarWidgetWindow : Window
         StopOutsideClickMonitor();
         _positionTimer.Stop();
         _positionTimer.Tick -= OnPositionTimerTick;
+        _resourceTimer.Stop();
+        _resourceTimer.Tick -= OnResourceTimerTick;
         _viewModel.Providers.CollectionChanged -= OnProvidersChanged;
         SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
         _updateService.StateChanged -= OnUpdateStateChanged;
