@@ -300,6 +300,7 @@ public sealed class AntigravityUsageProvider(
         var logPath = Path.Combine(
             stateDirectory,
             $"antigravity-{Guid.NewGuid():N}.log");
+        var csrfToken = Guid.NewGuid().ToString();
 
         var startInfo = new ProcessStartInfo
         {
@@ -317,6 +318,7 @@ public sealed class AntigravityUsageProvider(
         startInfo.ArgumentList.Add(cliPath);
         startInfo.ArgumentList.Add("--log-file");
         startInfo.ArgumentList.Add(logPath);
+        AddCliCsrfArguments(startInfo, csrfToken);
 
         using var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException(
@@ -348,6 +350,7 @@ public sealed class AntigravityUsageProvider(
                             HttpMethod.Post,
                             $"http://127.0.0.1:{port}{QuotaSummaryPath}");
                         request.Headers.Add("Connect-Protocol-Version", "1");
+                        AddCliCsrfHeader(request, csrfToken);
                         request.Content = new StringContent(
                             "{}",
                             Encoding.UTF8,
@@ -423,6 +426,21 @@ public sealed class AntigravityUsageProvider(
             {
             }
         }
+    }
+
+    internal static void AddCliCsrfArguments(
+        ProcessStartInfo startInfo,
+        string csrfToken)
+    {
+        startInfo.ArgumentList.Add("--csrf_token");
+        startInfo.ArgumentList.Add(csrfToken);
+    }
+
+    internal static void AddCliCsrfHeader(
+        HttpRequestMessage request,
+        string csrfToken)
+    {
+        request.Headers.Add("X-Codeium-Csrf-Token", csrfToken);
     }
 
     private static int? TryReadHttpPort(string logPath)

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Net;
@@ -644,6 +645,27 @@ Require(
             .RemainingRatio,
         0.40),
     "Antigravity 5시간 잔량");
+const string antigravityCsrfToken = "test-csrf-token";
+var antigravityStartInfo = new ProcessStartInfo();
+AntigravityUsageProvider.AddCliCsrfArguments(
+    antigravityStartInfo,
+    antigravityCsrfToken);
+Require(
+    antigravityStartInfo.ArgumentList.SequenceEqual(
+        ["--csrf_token", antigravityCsrfToken]),
+    "Antigravity CLI CSRF 실행 인자");
+using (var antigravityRequest = new HttpRequestMessage())
+{
+    AntigravityUsageProvider.AddCliCsrfHeader(
+        antigravityRequest,
+        antigravityCsrfToken);
+    Require(
+        antigravityRequest.Headers.TryGetValues(
+            "X-Codeium-Csrf-Token",
+            out var csrfValues) &&
+        csrfValues.SequenceEqual([antigravityCsrfToken]),
+        "Antigravity quota RPC CSRF 헤더");
+}
 
 if (args.Contains("--integration", StringComparer.Ordinal))
 {
