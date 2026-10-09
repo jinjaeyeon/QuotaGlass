@@ -36,6 +36,7 @@ public partial class TaskbarWidgetWindow : Window
     private const double DefaultWidgetHeight = 44;
     private const double CompactResourceMetricsWidth = 86;
     private const double VerticalProviderGraphWidth = 120;
+    private const double VerticalTaskbarWidgetWidth = 30;
     private const int MaxWidgetTransparencyPercent = 75;
     private static readonly nint HwndTopmost = new(-1);
     private readonly Action _openFullWindow;
@@ -57,6 +58,7 @@ public partial class TaskbarWidgetWindow : Window
     private nint _lastTaskbar;
     private bool _freeMovementEnabled;
     private bool _verticalLayoutEnabled;
+    private bool _isVerticalTaskbar;
     private int _widgetTransparencyPercent;
     private bool _widgetBackgroundEnabled;
     private bool _resourceMetricsEnabled;
@@ -88,6 +90,19 @@ public partial class TaskbarWidgetWindow : Window
     {
         get => (bool)GetValue(IsVerticalLayoutProperty);
         private set => SetValue(IsVerticalLayoutProperty, value);
+    }
+
+    public static readonly DependencyProperty IsDockedToVerticalTaskbarProperty =
+        DependencyProperty.Register(
+            nameof(IsDockedToVerticalTaskbar),
+            typeof(bool),
+            typeof(TaskbarWidgetWindow),
+            new PropertyMetadata(false));
+
+    public bool IsDockedToVerticalTaskbar
+    {
+        get => (bool)GetValue(IsDockedToVerticalTaskbarProperty);
+        private set => SetValue(IsDockedToVerticalTaskbarProperty, value);
     }
 
     public TaskbarWidgetWindow(
@@ -1017,6 +1032,16 @@ public partial class TaskbarWidgetWindow : Window
             return;
         }
 
+        var taskbarWidth = taskbarRect.Right - taskbarRect.Left;
+        var taskbarHeight = taskbarRect.Bottom - taskbarRect.Top;
+        var isVerticalTaskbar = taskbarWidth < taskbarHeight;
+        if (_isVerticalTaskbar != isVerticalTaskbar)
+        {
+            _isVerticalTaskbar = isVerticalTaskbar;
+            ApplyWidgetLayout();
+            UpdateLayout();
+        }
+
         var source = PresentationSource.FromVisual(this);
         var toDevice = source?.CompositionTarget?.TransformToDevice ??
                        Matrix.Identity;
@@ -1025,13 +1050,10 @@ public partial class TaskbarWidgetWindow : Window
         var width = Math.Max(1, (int)Math.Ceiling(size.X));
         var height = Math.Max(1, (int)Math.Ceiling(size.Y));
 
-        var taskbarWidth = taskbarRect.Right - taskbarRect.Left;
-        var taskbarHeight = taskbarRect.Bottom - taskbarRect.Top;
-        var isHorizontal = taskbarWidth >= taskbarHeight;
         int x;
         int y;
 
-        if (isHorizontal)
+        if (!isVerticalTaskbar)
         {
             var tray = FindWindowEx(
                 taskbar.Handle,
@@ -1062,7 +1084,7 @@ public partial class TaskbarWidgetWindow : Window
         else
         {
             x = taskbarRect.Left +
-                Math.Max(1, (taskbarWidth - width) / 2);
+                Math.Max(0, (taskbarWidth - width) / 2);
             var innerTop = taskbarRect.Top + 8;
             var innerBottom = Math.Max(
                 innerTop,
@@ -1658,9 +1680,11 @@ public partial class TaskbarWidgetWindow : Window
 
     private void ApplyWidgetLayout()
     {
-        var useVerticalLayout =
-            _freeMovementEnabled &&
-            _verticalLayoutEnabled;
+        var isDockedToVerticalTaskbar =
+            !_freeMovementEnabled && _isVerticalTaskbar;
+        var useVerticalLayout = isDockedToVerticalTaskbar ||
+                                (_freeMovementEnabled &&
+                                 _verticalLayoutEnabled);
         WidgetProvidersControl.ItemsPanel =
             (System.Windows.Controls.ItemsPanelTemplate)FindResource(
                 useVerticalLayout
@@ -1672,12 +1696,22 @@ public partial class TaskbarWidgetWindow : Window
         ResourceMetricsPanel.Orientation = useVerticalLayout
             ? System.Windows.Controls.Orientation.Vertical
             : System.Windows.Controls.Orientation.Horizontal;
-        ResourceMetricsBorder.Width = useVerticalLayout
-            ? VerticalProviderGraphWidth
-            : CompactResourceMetricsWidth;
+        ResourceMetricsBorder.Width = isDockedToVerticalTaskbar
+            ? VerticalTaskbarWidgetWidth
+            : useVerticalLayout
+                ? VerticalProviderGraphWidth
+                : CompactResourceMetricsWidth;
+        ResourceMetricsBorder.Padding = isDockedToVerticalTaskbar
+            ? new System.Windows.Thickness(2)
+            : new System.Windows.Thickness(5, 2, 5, 2);
         ResourceMetricsBorder.HorizontalAlignment =
             System.Windows.HorizontalAlignment.Left;
         IsVerticalLayout = useVerticalLayout;
+        IsDockedToVerticalTaskbar = isDockedToVerticalTaskbar;
+        WidgetChrome.MinWidth = isDockedToVerticalTaskbar ? 0 : 68;
+        WidgetChrome.Padding = isDockedToVerticalTaskbar
+            ? new System.Windows.Thickness(2, 4, 2, 4)
+            : new System.Windows.Thickness(7, 4, 7, 4);
         WidgetChrome.Height = useVerticalLayout
             ? double.NaN
             : DefaultWidgetHeight;

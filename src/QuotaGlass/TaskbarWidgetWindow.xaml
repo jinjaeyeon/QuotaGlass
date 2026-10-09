@@ -510,149 +510,248 @@
                 <ItemsControl x:Name="WidgetProvidersControl"
                               ItemsSource="{Binding WidgetProviders, ElementName=WidgetRoot}"
                               ItemsPanel="{StaticResource HorizontalWidgetProvidersPanel}">
-                <ItemsControl.Style>
-                    <Style TargetType="ItemsControl">
-                        <Setter Property="Visibility" Value="Visible" />
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding WidgetProviders.Count, ElementName=WidgetRoot}"
-                                         Value="0">
-                                <Setter Property="Visibility"
-                                        Value="Collapsed" />
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </ItemsControl.Style>
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <Grid Width="120"
-                              Height="34"
-                              ToolTip="{Binding CompactToolTip}">
-                            <Grid.Style>
-                                <Style TargetType="Grid">
-                                    <Setter Property="Margin"
-                                            Value="0,0,8,0" />
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsVerticalLayout, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
-                                                     Value="True">
+                    <ItemsControl.Style>
+                        <Style TargetType="ItemsControl">
+                            <Setter Property="Visibility" Value="Visible" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding WidgetProviders.Count, ElementName=WidgetRoot}"
+                                             Value="0">
+                                    <Setter Property="Visibility"
+                                            Value="Collapsed" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ItemsControl.Style>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid ToolTip="{Binding CompactToolTip}">
+                                <Grid x:Name="WideProviderContent"
+                                      Width="120"
+                                      Height="34">
+                                    <Grid.Style>
+                                        <Style TargetType="Grid">
                                             <Setter Property="Margin"
-                                                    Value="0,0,0,5" />
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </Grid.Style>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="28" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
+                                                    Value="0,0,8,0" />
+                                            <Style.Triggers>
+                                                <DataTrigger
+                                                    Binding="{Binding IsVerticalLayout, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                                                    Value="True">
+                                                    <Setter Property="Margin"
+                                                            Value="0,0,0,5" />
+                                                </DataTrigger>
+                                                <DataTrigger
+                                                    Binding="{Binding IsDockedToVerticalTaskbar, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                                                    Value="True">
+                                                    <Setter Property="Visibility"
+                                                            Value="Collapsed" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Grid.Style>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="28" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
 
-                            <Border Width="24"
-                                        Height="24"
-                                        HorizontalAlignment="Left"
-                                        VerticalAlignment="Center"
-                                        Background="{DynamicResource IconSurfaceBrush}"
-                                        BorderBrush="{DynamicResource BorderBrush}"
-                                        BorderThickness="1"
-                                        CornerRadius="6">
-                                <Grid Margin="4">
-                                    <Path Data="{Binding IconGeometry}"
-                                          Fill="{DynamicResource TextBrush}"
-                                          Stretch="Uniform">
-                                        <Path.Style>
-                                            <Style TargetType="Path">
-                                                <Setter Property="Visibility"
-                                                        Value="Collapsed" />
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding HasVectorIcon}"
-                                                                 Value="True">
+                                    <Border Width="24"
+                                            Height="24"
+                                            HorizontalAlignment="Left"
+                                            VerticalAlignment="Center"
+                                            Background="{DynamicResource IconSurfaceBrush}"
+                                            BorderBrush="{DynamicResource BorderBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="6">
+                                        <Grid Margin="4">
+                                            <Path Data="{Binding IconGeometry}"
+                                                  Fill="{DynamicResource TextBrush}"
+                                                  Stretch="Uniform">
+                                                <Path.Style>
+                                                    <Style TargetType="Path">
+                                                        <Setter Property="Visibility"
+                                                                Value="Collapsed" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding HasVectorIcon}"
+                                                                         Value="True">
+                                                                <Setter Property="Visibility"
+                                                                        Value="Visible" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Path.Style>
+                                            </Path>
+                                            <TextBlock HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center"
+                                                       Foreground="{DynamicResource TextBrush}"
+                                                       FontSize="11"
+                                                       FontWeight="SemiBold"
+                                                       Text="{Binding IconText}">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
                                                         <Setter Property="Visibility"
                                                                 Value="Visible" />
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </Path.Style>
-                                    </Path>
-                                    <TextBlock HorizontalAlignment="Center"
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding HasVectorIcon}"
+                                                                         Value="True">
+                                                                <Setter Property="Visibility"
+                                                                        Value="Collapsed" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </Grid>
+                                    </Border>
+
+                                    <ItemsControl Grid.Column="1"
+                                                  Margin="4,0,0,0"
+                                                  VerticalAlignment="Center"
+                                                  ItemsSource="{Binding CompactMeters}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid Height="17">
+                                                    <ProgressBar Height="15"
+                                                                 VerticalAlignment="Center"
+                                                                 Style="{StaticResource CompactUsageBarStyle}"
+                                                                 Value="{Binding RemainingRatio, Mode=OneWay}" />
+                                                    <Grid Margin="6,0"
+                                                          IsHitTestVisible="False">
+                                                        <TextBlock HorizontalAlignment="Left"
+                                                                   VerticalAlignment="Center"
+                                                                   Style="{StaticResource CompactMeterTextStyle}"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   Text="{Binding CompactLabel}" />
+                                                        <TextBlock HorizontalAlignment="Right"
+                                                                   VerticalAlignment="Center"
+                                                                   Style="{StaticResource CompactMeterTextStyle}"
+                                                                   Text="{Binding CompactRemainingText}" />
+                                                    </Grid>
+                                                    <controls:CompactUsageMarker Height="17"
+                                                            Panel.ZIndex="1"
+                                                            VerticalAlignment="Center"
+                                                            IsHitTestVisible="False"
+                                                            PositionRatio="{Binding SafeRemainingRatio}"
+                                                            IsWarning="{Binding IsWarning}"
+                                                            MarkerBrush="{DynamicResource TextBrush}"
+                                                            WarningBrush="{DynamicResource DangerBrush}" />
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                    <TextBlock Grid.Column="1"
+                                               HorizontalAlignment="Center"
                                                VerticalAlignment="Center"
-                                               Foreground="{DynamicResource TextBrush}"
-                                               FontSize="11"
-                                               FontWeight="SemiBold"
-                                               Text="{Binding IconText}">
+                                               Foreground="{DynamicResource MutedTextBrush}"
+                                               FontSize="10"
+                                               Text="확인 중…">
                                         <TextBlock.Style>
                                             <Style TargetType="TextBlock">
                                                 <Setter Property="Visibility"
-                                                        Value="Visible" />
+                                                        Value="Collapsed" />
                                                 <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding HasVectorIcon}"
-                                                                 Value="True">
+                                                    <DataTrigger Binding="{Binding HasUsage}"
+                                                                 Value="False">
                                                         <Setter Property="Visibility"
-                                                                Value="Collapsed" />
+                                                                Value="Visible" />
                                                     </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>
                                         </TextBlock.Style>
                                     </TextBlock>
                                 </Grid>
-                            </Border>
-
-                            <ItemsControl Grid.Column="1"
-                                          Margin="4,0,0,0"
-                                          VerticalAlignment="Center"
-                                          ItemsSource="{Binding CompactMeters}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Grid Height="17">
-                                            <ProgressBar Height="15"
-                                                         VerticalAlignment="Center"
-                                                         Style="{StaticResource CompactUsageBarStyle}"
-                                                         Value="{Binding RemainingRatio, Mode=OneWay}" />
-                                            <Grid Margin="6,0"
-                                                  IsHitTestVisible="False">
-                                                <TextBlock HorizontalAlignment="Left"
-                                                           VerticalAlignment="Center"
-                                                           Style="{StaticResource CompactMeterTextStyle}"
-                                                           TextTrimming="CharacterEllipsis"
-                                                           Text="{Binding CompactLabel}" />
-                                                <TextBlock HorizontalAlignment="Right"
-                                                           VerticalAlignment="Center"
-                                                           Style="{StaticResource CompactMeterTextStyle}"
-                                                           Text="{Binding CompactRemainingText}" />
-                                            </Grid>
-                                            <controls:CompactUsageMarker Height="17"
-                                                                         Panel.ZIndex="1"
-                                                                         VerticalAlignment="Center"
-                                                                         IsHitTestVisible="False"
-                                                                         PositionRatio="{Binding SafeRemainingRatio}"
-                                                                         IsWarning="{Binding IsWarning}"
-                                                                         MarkerBrush="{DynamicResource TextBrush}"
-                                                                         WarningBrush="{DynamicResource DangerBrush}" />
+                                <StackPanel x:Name="NarrowProviderContent"
+                                            Width="30"
+                                            Height="34"
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Center">
+                                    <StackPanel.Style>
+                                        <Style TargetType="StackPanel">
+                                            <Setter Property="Visibility"
+                                                    Value="Collapsed" />
+                                            <Setter Property="Margin"
+                                                    Value="0,0,8,0" />
+                                            <Style.Triggers>
+                                                <DataTrigger
+                                                    Binding="{Binding IsVerticalLayout, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                                                    Value="True">
+                                                    <Setter Property="Margin"
+                                                            Value="0,0,0,5" />
+                                                </DataTrigger>
+                                                <DataTrigger
+                                                    Binding="{Binding IsDockedToVerticalTaskbar, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                                                    Value="True">
+                                                    <Setter Property="Visibility"
+                                                            Value="Visible" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </StackPanel.Style>
+                                    <Border Width="22"
+                                            Height="22"
+                                            HorizontalAlignment="Center"
+                                            Background="{DynamicResource IconSurfaceBrush}"
+                                            BorderBrush="{DynamicResource BorderBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="6">
+                                        <Grid Margin="4">
+                                            <Path Data="{Binding IconGeometry}"
+                                                  Fill="{DynamicResource TextBrush}"
+                                                  Stretch="Uniform">
+                                                <Path.Style>
+                                                    <Style TargetType="Path">
+                                                        <Setter Property="Visibility"
+                                                                Value="Collapsed" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding HasVectorIcon}"
+                                                                         Value="True">
+                                                                <Setter Property="Visibility"
+                                                                        Value="Visible" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Path.Style>
+                                            </Path>
+                                            <TextBlock HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center"
+                                                       Foreground="{DynamicResource TextBrush}"
+                                                       FontSize="10"
+                                                       FontWeight="SemiBold"
+                                                       Text="{Binding IconText}">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Visibility"
+                                                                Value="Visible" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding HasVectorIcon}"
+                                                                         Value="True">
+                                                                <Setter Property="Visibility"
+                                                                        Value="Collapsed" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
                                         </Grid>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-
-                            <TextBlock Grid.Column="1"
-                                       HorizontalAlignment="Center"
-                                       VerticalAlignment="Center"
-                                       Foreground="{DynamicResource MutedTextBrush}"
-                                       FontSize="10"
-                                       Text="확인 중…">
-                                <TextBlock.Style>
-                                    <Style TargetType="TextBlock">
-                                        <Setter Property="Visibility"
-                                                Value="Collapsed" />
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding HasUsage}"
-                                                         Value="False">
-                                                <Setter Property="Visibility"
-                                                        Value="Visible" />
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </TextBlock.Style>
-                            </TextBlock>
-                        </Grid>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
+                                    </Border>
+                                    <ItemsControl Width="26"
+                                                  HorizontalAlignment="Center"
+                                                  ItemsSource="{Binding CompactMeters}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid Height="4"
+                                                      Margin="0,1">
+                                                    <ProgressBar Height="3"
+                                                                 VerticalAlignment="Center"
+                                                                 Style="{StaticResource CompactUsageBarStyle}"
+                                                                 Value="{Binding RemainingRatio, Mode=OneWay}" />
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
                 <StackPanel x:Name="ResourceMetricsPanel"
@@ -683,44 +782,85 @@
                             </Style>
                         </Border.Style>
                         <Grid>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="13" />
-                                <RowDefinition Height="*" />
-                            </Grid.RowDefinitions>
-                            <StackPanel Orientation="Horizontal">
+                            <Grid x:Name="WideResourceContent">
+                                <Grid.Style>
+                                    <Style TargetType="Grid">
+                                        <Style.Triggers>
+                                            <DataTrigger
+                                                Binding="{Binding IsDockedToVerticalTaskbar, ElementName=WidgetRoot}"
+                                                Value="True">
+                                                <Setter Property="Visibility"
+                                                        Value="Collapsed" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Grid.Style>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="13" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Foreground="{DynamicResource SafeBrush}"
-                                               FontSize="8"
-                                               FontWeight="SemiBold"
-                                               Text="C" />
-                                    <TextBlock Margin="1,0,0,0"
-                                               Foreground="{DynamicResource TextBrush}"
-                                               FontSize="8"
-                                               FontWeight="SemiBold"
-                                               Text="{Binding SystemResources.CpuUsageText, ElementName=WidgetRoot}" />
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Foreground="{DynamicResource SafeBrush}"
+                                                   FontSize="8"
+                                                   FontWeight="SemiBold"
+                                                   Text="C" />
+                                        <TextBlock Margin="1,0,0,0"
+                                                   Foreground="{DynamicResource TextBrush}"
+                                                   FontSize="8"
+                                                   FontWeight="SemiBold"
+                                                   Text="{Binding SystemResources.CpuUsageText, ElementName=WidgetRoot}" />
+                                    </StackPanel>
+                                    <StackPanel Margin="5,0,0,0"
+                                                Orientation="Horizontal">
+                                        <TextBlock Foreground="{DynamicResource WarningBrush}"
+                                                   FontSize="8"
+                                                   FontWeight="SemiBold"
+                                                   Text="M" />
+                                        <TextBlock Margin="1,0,0,0"
+                                                   Foreground="{DynamicResource TextBrush}"
+                                                   FontSize="8"
+                                                   FontWeight="SemiBold"
+                                                   Text="{Binding SystemResources.MemoryUsageText, ElementName=WidgetRoot}" />
+                                    </StackPanel>
                                 </StackPanel>
-                                <StackPanel Margin="5,0,0,0"
-                                            Orientation="Horizontal">
-                                    <TextBlock Foreground="{DynamicResource WarningBrush}"
-                                               FontSize="8"
-                                               FontWeight="SemiBold"
-                                               Text="M" />
-                                    <TextBlock Margin="1,0,0,0"
-                                               Foreground="{DynamicResource TextBrush}"
-                                               FontSize="8"
-                                               FontWeight="SemiBold"
-                                               Text="{Binding SystemResources.MemoryUsageText, ElementName=WidgetRoot}" />
-                                </StackPanel>
-                            </StackPanel>
-                            <controls:UsageSparkline Grid.Row="1"
-                                                     Margin="0,1,0,0"
+                                <controls:UsageSparkline Grid.Row="1"
+                                                         Margin="0,1,0,0"
+                                                         BaselineBrush="{DynamicResource TrackBrush}"
+                                                         IsHitTestVisible="False"
+                                                         SecondaryStroke="{DynamicResource WarningBrush}"
+                                                         SecondaryValues="{Binding SystemResources.MemoryHistory, ElementName=WidgetRoot}"
+                                                         Stroke="{DynamicResource SafeBrush}"
+                                                         StrokeThickness="1.4"
+                                                         Values="{Binding SystemResources.CpuHistory, ElementName=WidgetRoot}" />
+                            </Grid>
+                            <controls:UsageSparkline x:Name="NarrowResourceContent"
+                                                     Width="22"
+                                                     Height="26"
+                                                     HorizontalAlignment="Center"
+                                                     VerticalAlignment="Center"
                                                      BaselineBrush="{DynamicResource TrackBrush}"
                                                      IsHitTestVisible="False"
                                                      SecondaryStroke="{DynamicResource WarningBrush}"
                                                      SecondaryValues="{Binding SystemResources.MemoryHistory, ElementName=WidgetRoot}"
                                                      Stroke="{DynamicResource SafeBrush}"
                                                      StrokeThickness="1.4"
-                                                     Values="{Binding SystemResources.CpuHistory, ElementName=WidgetRoot}" />
+                                                     Values="{Binding SystemResources.CpuHistory, ElementName=WidgetRoot}">
+                                <controls:UsageSparkline.Style>
+                                    <Style TargetType="controls:UsageSparkline">
+                                        <Setter Property="Visibility"
+                                                Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger
+                                                Binding="{Binding IsDockedToVerticalTaskbar, ElementName=WidgetRoot}"
+                                                Value="True">
+                                                <Setter Property="Visibility"
+                                                        Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </controls:UsageSparkline.Style>
+                            </controls:UsageSparkline>
                         </Grid>
                     </Border>
                 </StackPanel>
