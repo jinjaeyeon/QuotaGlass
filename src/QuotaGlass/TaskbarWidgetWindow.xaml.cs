@@ -27,9 +27,12 @@ public partial class TaskbarWidgetWindow : Window
     private const int WmXButtonDown = 0x020B;
     private const int WsExToolWindow = 0x00000080;
     private const int WsExNoActivate = 0x08000000;
+    private const int WsExAppWindow = 0x00040000;
     private const uint SwpNoSize = 0x0001;
     private const uint SwpNoMove = 0x0002;
+    private const uint SwpNoZOrder = 0x0004;
     private const uint SwpNoActivate = 0x0010;
+    private const uint SwpFrameChanged = 0x0020;
     private const uint SwpNoOwnerZOrder = 0x0200;
     private const uint GwHwndNext = 2;
     private const uint MonitorDefaultToNearest = 2;
@@ -42,6 +45,7 @@ public partial class TaskbarWidgetWindow : Window
     private const double MaxProviderCardWidth = 400;
     private const int MaxWidgetTransparencyPercent = 75;
     private static readonly nint HwndTopmost = new(-1);
+    private static readonly nint HwndNotTopmost = new(-2);
     private readonly Action _openFullWindow;
     private readonly Action _exitApplication;
     private readonly AppUpdateService _updateService;
@@ -60,6 +64,7 @@ public partial class TaskbarWidgetWindow : Window
     private nint _dragTaskbar;
     private nint _lastTaskbar;
     private bool _freeMovementEnabled;
+    private bool _freeMovementAlwaysOnTop = true;
     private bool _verticalLayoutEnabled;
     private bool _isVerticalTaskbar;
     private int _widgetTransparencyPercent;
@@ -67,8 +72,10 @@ public partial class TaskbarWidgetWindow : Window
     private bool _resourceMetricsEnabled;
     private bool _antiAliasingEnabled;
     private TaskbarWidgetPlacementStore.ScreenPosition? _screenPosition;
+
     private TaskbarWidgetPlacementStore.MonitorPosition?
         _taskbarMonitorPosition;
+
     private bool _isPointerDown;
     private bool _isDragging;
     private bool _isResizing;
@@ -81,10 +88,7 @@ public partial class TaskbarWidgetWindow : Window
     private bool _isClosed;
     private string? _updateStatusText;
 
-    public ObservableCollection<ProviderUsageViewModel> WidgetProviders
-    {
-        get;
-    } = [];
+    public ObservableCollection<ProviderUsageViewModel> WidgetProviders { get; } = [];
 
     public SystemResourceUsageViewModel SystemResources { get; } = new();
 
@@ -143,8 +147,6 @@ public partial class TaskbarWidgetWindow : Window
         _exitApplication = exitApplication;
         _updateService = updateService;
         _restartWithUpdate = restartWithUpdate;
-        AppVersionMenuItem.Header =
-            $"QuotaGlass v{_updateService.CurrentVersion.ToString(3)}";
         _mouseHookCallback = OnLowLevelMouse;
         _selectedProviderIds = TaskbarWidgetProviderStore.LoadOrDefault();
         _positionRatio = TaskbarWidgetPlacementStore.Load();
@@ -153,6 +155,8 @@ public partial class TaskbarWidgetWindow : Window
             TaskbarWidgetPlacementStore.LoadTaskbarMonitorPosition();
         _freeMovementEnabled =
             TaskbarWidgetSettingsStore.LoadFreeMovementEnabled();
+        _freeMovementAlwaysOnTop =
+            TaskbarWidgetSettingsStore.LoadFreeMovementAlwaysOnTopEnabled();
         _savedProviderCardWidth = Math.Clamp(
             TaskbarWidgetSettingsStore.LoadProviderCardWidth() ??
             DefaultProviderCardWidth,
@@ -232,18 +236,14 @@ public partial class TaskbarWidgetWindow : Window
                     return;
                 }
 
-                PromoteToTopmost();
+                ApplyTopmostPreference();
             });
     }
 
     private void OnSourceInitialized(object? sender, EventArgs e)
     {
-        var handle = new WindowInteropHelper(this).Handle;
-        var extendedStyle = GetWindowLongPtr(handle, GwlExStyle).ToInt64();
-        SetWindowLongPtr(
-            handle,
-            GwlExStyle,
-            new nint(extendedStyle | WsExToolWindow | WsExNoActivate));
+        ApplyTaskbarIconPreference();
+        ApplyTopmostPreference();
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -267,7 +267,7 @@ public partial class TaskbarWidgetWindow : Window
         PositionWidget();
         if (_freeMovementEnabled)
         {
-            PromoteToTopmost();
+            ApplyTopmostPreference();
         }
         else
         {
@@ -288,7 +288,7 @@ public partial class TaskbarWidgetWindow : Window
                               !TaskbarVisibilityDetector.IsShown(taskbar);
         var shouldHide = !_freeMovementEnabled &&
                          (FullscreenWindowDetector.IsForegroundFullscreenOn(
-                               handle) ||
+                              handle) ||
                           isTaskbarHidden &&
                           !WidgetContextMenu.IsOpen);
         if (shouldHide == _isHiddenAutomatically)
@@ -306,7 +306,7 @@ public partial class TaskbarWidgetWindow : Window
 
         Show();
         PositionWidget();
-        PromoteToTopmost();
+        ApplyTopmostPreference();
         return false;
     }
 
@@ -328,14 +328,66 @@ public partial class TaskbarWidgetWindow : Window
             return;
         }
 
-        PromoteToTopmost();
+        ApplyTopmostPreference();
     }
 
-    private void PromoteToTopmost()
+    private bool ShouldKeepOnTop =>
+        !_freeMovementEnabled || _freeMovementAlwaysOnTop;
+
+    private bool ShouldShowInTaskbar =>
+        _freeMovementEnabled && !_freeMovementAlwaysOnTop;
+
+    private nint WidgetZOrder =>
+        ShouldKeepOnTop ? HwndTopmost : HwndNotTopmost;
+
+    private uint WidgetPositionFlags =>
+        SwpNoActivate | (ShouldKeepOnTop ? 0u : SwpNoZOrder);
+
+    private void ApplyTaskbarIconPreference()
     {
+        var shouldShowInTaskbar = ShouldShowInTaskbar;
+        ShowInTaskbar = shouldShowInTaskbar;
+        ShowActivated = shouldShowInTaskbar;
+
+        var handle = new WindowInteropHelper(this).Handle;
+        if (handle == nint.Zero)
+        {
+            return;
+        }
+
+        var extendedStyle = GetWindowLongPtr(handle, GwlExStyle).ToInt64();
+        extendedStyle = shouldShowInTaskbar
+            ? (extendedStyle & ~(WsExToolWindow | WsExNoActivate)) |
+              WsExAppWindow
+            : (extendedStyle & ~WsExAppWindow) |
+              WsExToolWindow |
+              WsExNoActivate;
+        SetWindowLongPtr(handle, GwlExStyle, new nint(extendedStyle));
+        SetWindowPos(
+            handle,
+            nint.Zero,
+            0,
+            0,
+            0,
+            0,
+            SwpNoMove |
+            SwpNoSize |
+            SwpNoZOrder |
+            SwpNoActivate |
+            SwpFrameChanged);
+    }
+
+    private void ApplyTopmostPreference()
+    {
+        var shouldBeTopmost = ShouldKeepOnTop;
+        if (Topmost != shouldBeTopmost)
+        {
+            Topmost = shouldBeTopmost;
+        }
+
         SetWindowPos(
             new WindowInteropHelper(this).Handle,
-            HwndTopmost,
+            WidgetZOrder,
             0,
             0,
             0,
@@ -343,7 +395,8 @@ public partial class TaskbarWidgetWindow : Window
             SwpNoSize |
             SwpNoMove |
             SwpNoActivate |
-            SwpNoOwnerZOrder);
+            SwpNoOwnerZOrder |
+            (ShouldKeepOnTop ? 0u : SwpNoZOrder));
     }
 
     private static bool IsWindowAbove(nint candidate, nint reference)
@@ -416,6 +469,17 @@ public partial class TaskbarWidgetWindow : Window
         object sender,
         RoutedEventArgs e) =>
         _openFullWindow();
+
+    private void AboutMenuItem_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        var window = new AboutWindow(_updateService.CurrentVersion)
+        {
+            Owner = this
+        };
+        window.ShowDialog();
+    }
 
     private void RefreshMenuItem_Click(
         object sender,
@@ -779,6 +843,12 @@ public partial class TaskbarWidgetWindow : Window
         RoutedEventArgs e) =>
         SetFreeMovementEnabled(FreeMovementMenuItem.IsChecked);
 
+    private void FreeMovementAlwaysOnTopMenuItem_Click(
+        object sender,
+        RoutedEventArgs e) =>
+        SetFreeMovementAlwaysOnTopEnabled(
+            FreeMovementAlwaysOnTopMenuItem.IsChecked);
+
     private void VerticalLayoutMenuItem_Click(
         object sender,
         RoutedEventArgs e) =>
@@ -1037,12 +1107,12 @@ public partial class TaskbarWidgetWindow : Window
 
         SetWindowPos(
             new WindowInteropHelper(this).Handle,
-            HwndTopmost,
+            WidgetZOrder,
             x,
             y,
             width,
             height,
-            SwpNoActivate);
+            WidgetPositionFlags);
         e.Handled = true;
     }
 
@@ -1148,12 +1218,12 @@ public partial class TaskbarWidgetWindow : Window
 
         SetWindowPos(
             handle,
-            HwndTopmost,
+            WidgetZOrder,
             x,
             y,
             width,
             height,
-            SwpNoActivate);
+            WidgetPositionFlags);
     }
 
     private void PositionOnTaskbar()
@@ -1608,13 +1678,26 @@ public partial class TaskbarWidgetWindow : Window
 
         _freeMovementEnabled = enabled;
         TaskbarWidgetSettingsStore.SaveFreeMovementEnabled(enabled);
+        ApplyTopmostPreference();
+        ApplyTaskbarIconPreference();
         ApplyWidgetLayout();
         PositionWidget();
-        if (enabled)
+        UpdateFreeMovementMenuItem();
+    }
+
+    private void SetFreeMovementAlwaysOnTopEnabled(bool enabled)
+    {
+        if (_freeMovementAlwaysOnTop == enabled)
         {
-            PromoteToTopmost();
+            UpdateFreeMovementMenuItem();
+            return;
         }
 
+        _freeMovementAlwaysOnTop = enabled;
+        TaskbarWidgetSettingsStore.SaveFreeMovementAlwaysOnTopEnabled(
+            enabled);
+        ApplyTopmostPreference();
+        ApplyTaskbarIconPreference();
         UpdateFreeMovementMenuItem();
     }
 
@@ -1624,6 +1707,11 @@ public partial class TaskbarWidgetWindow : Window
         FreeMovementCheckGlyph.Text = _freeMovementEnabled
             ? "✓"
             : string.Empty;
+        FreeMovementAlwaysOnTopMenuItem.IsChecked =
+            _freeMovementAlwaysOnTop;
+        FreeMovementAlwaysOnTopMenuItem.IsEnabled = _freeMovementEnabled;
+        FreeMovementAlwaysOnTopCheckGlyph.Text =
+            _freeMovementAlwaysOnTop ? "✓" : string.Empty;
         ResetWidthMenuItem.IsEnabled = _freeMovementEnabled;
         UpdateVerticalLayoutMenuItem();
     }

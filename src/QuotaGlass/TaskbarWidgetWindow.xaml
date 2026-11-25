@@ -12,7 +12,7 @@
         ResizeMode="NoResize"
         ShowInTaskbar="False"
         ShowActivated="False"
-        Topmost="True"
+        Topmost="False"
         SnapsToDevicePixels="True"
         TextOptions.TextFormattingMode="Display"
         UseLayoutRounding="True">
@@ -226,9 +226,9 @@
                     <Style TargetType="Separator"
                            BasedOn="{StaticResource WidgetMenuSeparatorStyle}" />
                 </ContextMenu.Resources>
-                <MenuItem x:Name="AppVersionMenuItem"
-                          Header="QuotaGlass"
-                          IsEnabled="False">
+                <MenuItem x:Name="AboutMenuItem"
+                          Header="이 프로그램에 대하여"
+                          Click="AboutMenuItem_Click">
                     <MenuItem.Icon>
                         <TextBlock HorizontalAlignment="Center"
                                    VerticalAlignment="Center"
@@ -401,6 +401,19 @@
                               Click="FreeMovementMenuItem_Click">
                         <MenuItem.Icon>
                             <TextBlock x:Name="FreeMovementCheckGlyph"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       FontSize="12" />
+                        </MenuItem.Icon>
+                    </MenuItem>
+                    <MenuItem x:Name="FreeMovementAlwaysOnTopMenuItem"
+                              Header="자유 이동 시 항상 위에 표시"
+                              IsCheckable="True"
+                              IsEnabled="False"
+                              StaysOpenOnClick="True"
+                              Click="FreeMovementAlwaysOnTopMenuItem_Click">
+                        <MenuItem.Icon>
+                            <TextBlock x:Name="FreeMovementAlwaysOnTopCheckGlyph"
                                        HorizontalAlignment="Center"
                                        VerticalAlignment="Center"
                                        FontSize="12" />

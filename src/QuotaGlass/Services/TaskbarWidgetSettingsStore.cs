@@ -10,26 +10,37 @@ internal static class TaskbarWidgetSettingsStore
             Environment.SpecialFolder.LocalApplicationData),
         "QuotaGlass",
         "taskbar-widget-free-movement.txt");
+
+    private static readonly string FreeMovementAlwaysOnTopPath = Path.Combine(
+        Environment.GetFolderPath(
+            Environment.SpecialFolder.LocalApplicationData),
+        "QuotaGlass",
+        "taskbar-widget-free-movement-always-on-top.txt");
+
     private static readonly string VerticalLayoutPath = Path.Combine(
         Environment.GetFolderPath(
             Environment.SpecialFolder.LocalApplicationData),
         "QuotaGlass",
         "taskbar-widget-vertical-layout.txt");
+
     private static readonly string TransparencyPath = Path.Combine(
         Environment.GetFolderPath(
             Environment.SpecialFolder.LocalApplicationData),
         "QuotaGlass",
         "taskbar-widget-transparency.txt");
+
     private static readonly string BackgroundEnabledPath = Path.Combine(
         Environment.GetFolderPath(
             Environment.SpecialFolder.LocalApplicationData),
         "QuotaGlass",
         "taskbar-widget-background-enabled.txt");
+
     private static readonly string AntiAliasingPath = Path.Combine(
         Environment.GetFolderPath(
             Environment.SpecialFolder.LocalApplicationData),
         "QuotaGlass",
         "taskbar-widget-anti-aliasing.txt");
+
     private static readonly string ResourceMetricsPath = Path.Combine(
         Environment.GetFolderPath(
             Environment.SpecialFolder.LocalApplicationData),
@@ -113,6 +124,47 @@ internal static class TaskbarWidgetSettingsStore
             }
 
             File.WriteAllText(FreeMovementPath, enabled.ToString());
+        }
+        catch
+        {
+            // A read-only profile must not prevent the widget from working.
+        }
+    }
+
+    public static bool LoadFreeMovementAlwaysOnTopEnabled()
+    {
+        try
+        {
+            if (!File.Exists(FreeMovementAlwaysOnTopPath))
+            {
+                return true;
+            }
+
+            return !bool.TryParse(
+                       File.ReadAllText(FreeMovementAlwaysOnTopPath),
+                       out var enabled) ||
+                   enabled;
+        }
+        catch
+        {
+            return true;
+        }
+    }
+
+    public static void SaveFreeMovementAlwaysOnTopEnabled(bool enabled)
+    {
+        try
+        {
+            var directory = Path.GetDirectoryName(
+                FreeMovementAlwaysOnTopPath);
+            if (!string.IsNullOrWhiteSpace(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            File.WriteAllText(
+                FreeMovementAlwaysOnTopPath,
+                enabled.ToString());
         }
         catch
         {

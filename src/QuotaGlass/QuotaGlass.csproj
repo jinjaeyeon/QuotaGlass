@@ -10,10 +10,12 @@
     <RootNamespace>QuotaGlass</RootNamespace>
     <AssemblyName>QuotaGlass</AssemblyName>
     <VersionPrefix>0.1.0</VersionPrefix>
+    <BuildDate>$([System.DateTime]::Now.ToString('yyyy-MM-dd'))</BuildDate>
     <ApplicationIcon>Assets\QuotaGlass.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <Resource Include="Assets\QuotaGlass.ico" />
     <InternalsVisibleTo Include="QuotaGlass.SmokeTests" />
+    <AssemblyMetadata Include="BuildDate" Value="$(BuildDate)" />
   </ItemGroup>
 </Project>
