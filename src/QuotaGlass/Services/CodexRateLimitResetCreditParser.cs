@@ -17,6 +17,7 @@ public static class CodexRateLimitResetCreditParser
         }
 
         DateTimeOffset? earliestExpiresAt = null;
+        ResetCreditRedeemOption? redeem = null;
         if (summary.TryGetProperty("credits", out var credits) &&
             credits.ValueKind == JsonValueKind.Array)
         {
@@ -25,33 +26,62 @@ public static class CodexRateLimitResetCreditParser
                 if (credit.ValueKind != JsonValueKind.Object ||
                     (credit.TryGetProperty("status", out var status) &&
                      status.ValueKind == JsonValueKind.String &&
-                     status.GetString() is not "available") ||
-                    !credit.TryGetProperty("expiresAt", out var expiry) ||
-                    expiry.ValueKind != JsonValueKind.Number ||
-                    !expiry.TryGetInt64(out var unixSeconds))
+                     status.GetString() is not "available"))
                 {
                     continue;
                 }
 
-                DateTimeOffset expiresAt;
-                try
+                // expiresAt이 null이면 만료되지 않는 티켓이다.
+                DateTimeOffset? expiresAt = null;
+                if (credit.TryGetProperty("expiresAt", out var expiry) &&
+                    expiry.ValueKind == JsonValueKind.Number &&
+                    expiry.TryGetInt64(out var unixSeconds))
                 {
-                    expiresAt = DateTimeOffset.FromUnixTimeSeconds(unixSeconds);
-                }
-                catch (ArgumentOutOfRangeException)
-                {
-                    continue;
+                    try
+                    {
+                        expiresAt = DateTimeOffset.FromUnixTimeSeconds(
+                            unixSeconds);
+                    }
+                    catch (ArgumentOutOfRangeException)
+                    {
+                        continue;
+                    }
                 }
 
-                if (earliestExpiresAt is null || expiresAt < earliestExpiresAt)
+                if (expiresAt is { } value &&
+                    (earliestExpiresAt is null || value < earliestExpiresAt))
                 {
-                    earliestExpiresAt = expiresAt;
+                    earliestExpiresAt = value;
+                }
+
+                // 가장 빨리 만료되는 티켓부터 사용한다. 만료가 없는 티켓은 마지막.
+                if (ReadString(credit, "id") is { } id &&
+                    (redeem is null ||
+                     (expiresAt ?? DateTimeOffset.MaxValue) <
+                     (redeem.ExpiresAt ?? DateTimeOffset.MaxValue)))
+                {
+                    redeem = new ResetCreditRedeemOption(
+                        id,
+                        ReadString(credit, "title") ?? "리셋 티켓",
+                        ReadString(credit, "resetType"),
+                        1,
+                        expiresAt,
+                        true,
+                        null);
                 }
             }
         }
 
         return new ResetCreditSummary(
             Math.Max(0, availableCount),
-            earliestExpiresAt);
+            earliestExpiresAt,
+            redeem);
     }
+
+    private static string? ReadString(JsonElement element, string name) =>
+        element.TryGetProperty(name, out var value) &&
+        value.ValueKind == JsonValueKind.String &&
+        !string.IsNullOrWhiteSpace(value.GetString())
+            ? value.GetString()
+            : null;
 }

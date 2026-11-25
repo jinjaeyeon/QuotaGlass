@@ -1,10 +1,14 @@
 using QuotaGlass.Models;
+using QuotaGlass.Services;
 
 namespace QuotaGlass.ViewModels;
 
 public sealed class ProviderUsageViewModel
 {
-    public ProviderUsageViewModel(UsageSnapshot snapshot, DateTimeOffset now)
+    public ProviderUsageViewModel(
+        UsageSnapshot snapshot,
+        DateTimeOffset now,
+        Func<ProviderUsageViewModel, Task>? redeemHandler = null)
     {
         Snapshot = snapshot;
         Provider = snapshot.Provider;
@@ -17,6 +21,15 @@ public sealed class ProviderUsageViewModel
         ResetCreditSummaryText = FormatResetCreditSummary(
             snapshot.ResetCredits,
             now);
+        if (snapshot.ResetCredits?.Redeem is { } redeem &&
+            redeemHandler is not null)
+        {
+            RedeemOption = redeem;
+            RedeemToolTip = BuildRedeemToolTip(redeem, now);
+            RedeemCommand = new AsyncRelayCommand(
+                () => redeemHandler(this),
+                () => redeem.UsableNow);
+        }
 
         var meters = snapshot.Meters
             .Select(meter => new MeterUsageViewModel(meter, now))
@@ -45,6 +58,10 @@ public sealed class ProviderUsageViewModel
     public string? StatusMessage { get; }
     public string? ResetCreditSummaryText { get; }
     public bool HasResetCreditSummary => ResetCreditSummaryText is not null;
+    public ResetCreditRedeemOption? RedeemOption { get; }
+    public bool HasRedeemOption => RedeemOption is not null;
+    public string? RedeemToolTip { get; }
+    public AsyncRelayCommand? RedeemCommand { get; }
     public IReadOnlyList<MeterUsageViewModel> Meters { get; }
     public MeterUsageViewModel? PrimaryMeter { get; }
     public IReadOnlyList<MeterUsageViewModel> SecondaryMeters { get; }
@@ -69,6 +86,35 @@ public sealed class ProviderUsageViewModel
             : string.Empty;
         return $"{DisplayName}\n{string.Join("\n", meters)}" +
                $"{resetCredits}\n클릭해서 전체 보기";
+    }
+
+    internal static string DescribeKind(ResetCreditRedeemOption option) =>
+        option.Kind switch
+        {
+            "session" => "5시간 한도 리셋",
+            "weekly" => "주간 한도 리셋",
+            "full" => "전체 한도 리셋",
+            _ => string.IsNullOrWhiteSpace(option.Label)
+                ? "리셋 티켓"
+                : option.Label
+        };
+
+    internal static string FormatExpiry(
+        ResetCreditRedeemOption option) =>
+        option.ExpiresAt is { } expiresAt
+            ? $"{expiresAt.ToLocalTime():yyyy-MM-dd HH:mm}"
+            : "기한 없음";
+
+    private static string BuildRedeemToolTip(
+        ResetCreditRedeemOption option,
+        DateTimeOffset now)
+    {
+        var summary =
+            $"{DescribeKind(option)} · 만료 {FormatExpiry(option)}" +
+            "\n가장 빨리 만료되는 티켓부터 사용합니다.";
+        return option.UsableNow
+            ? summary
+            : $"{summary}\n{ClaudeResetMessages.DescribeUnavailable(option.UnavailableReason)}";
     }
 
     private static string? FormatResetCreditSummary(

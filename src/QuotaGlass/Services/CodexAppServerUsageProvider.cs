@@ -7,8 +7,14 @@ using QuotaGlass.Models;
 namespace QuotaGlass.Services;
 
 public sealed class CodexAppServerUsageProvider(
-    AgentInstallation installation) : IUsageProvider
+    AgentInstallation installation) :
+    IUsageProvider,
+    IResetCreditRedeemer
 {
+    // 마지막으로 사용량 조회에 성공한 CODEX_HOME. 티켓 사용도 같은 계정에서 한다.
+    private string? _activeCodexHome;
+    private bool _hasActiveCodexHome;
+
     private const int MaxFetchAttempts = 3;
     private static readonly TimeSpan[] RetryDelays =
     [
@@ -34,10 +40,13 @@ public sealed class CodexAppServerUsageProvider(
         {
             try
             {
-                return await FetchWithRetriesAsync(
+                var snapshot = await FetchWithRetriesAsync(
                     installation.ExecutablePath,
                     codexHome,
                     cancellationToken);
+                _activeCodexHome = codexHome;
+                _hasActiveCodexHome = true;
+                return snapshot;
             }
             catch (OperationCanceledException) when (
                 cancellationToken.IsCancellationRequested)
@@ -54,6 +63,91 @@ public sealed class CodexAppServerUsageProvider(
             "Codex 사용량 조회를 완료하지 못했습니다.",
             lastException);
     }
+
+    public async Task<ResetRedeemResult> RedeemResetCreditAsync(
+        ResetCreditRedeemOption option,
+        string requestId,
+        CancellationToken cancellationToken)
+    {
+        if (installation.ExecutablePath is null || !_hasActiveCodexHome)
+        {
+            return new ResetRedeemResult(
+                false,
+                "Codex 계정 정보를 아직 읽지 못했습니다. 새로고침 후 다시 시도해 주세요.");
+        }
+
+        using var process = StartAppServer(
+            installation.ExecutablePath,
+            _activeCodexHome);
+        try
+        {
+            await WriteRequestAsync(
+                process,
+                BuildInitializeRequest(),
+                cancellationToken);
+            await ReadResultAsync(process, 1, cancellationToken);
+            await WriteNotificationAsync(
+                process,
+                BuildInitializedNotification(),
+                cancellationToken);
+            await WriteRequestAsync(
+                process,
+                BuildConsumeResetCreditRequest(option.GrantId, requestId),
+                cancellationToken);
+            var result = await ReadResultAsync(process, 4, cancellationToken);
+            return DescribeConsumeOutcome(result);
+        }
+        catch (Exception exception) when (
+            exception is IOException or
+                InvalidOperationException or
+                JsonException or
+                Win32Exception)
+        {
+            return new ResetRedeemResult(
+                false,
+                "리셋 티켓 사용에 실패했습니다. 사용되지 않았을 수 있으니 " +
+                $"새로고침 후 확인해 주세요. ({exception.Message})");
+        }
+        finally
+        {
+            await StopProcessAsync(process);
+        }
+    }
+
+    internal static string BuildConsumeResetCreditRequest(
+        string creditId,
+        string idempotencyKey) =>
+        JsonSerializer.Serialize(
+            new
+            {
+                id = 4,
+                method = "account/rateLimitResetCredit/consume",
+                @params = new { creditId, idempotencyKey }
+            });
+
+    internal static ResetRedeemResult DescribeConsumeOutcome(
+        JsonElement result) =>
+        (result.TryGetProperty("outcome", out var outcome) &&
+         outcome.ValueKind == JsonValueKind.String
+            ? outcome.GetString()
+            : null) switch
+        {
+            "reset" => new ResetRedeemResult(
+                true,
+                "리셋 티켓을 사용했습니다."),
+            "nothingToReset" => new ResetRedeemResult(
+                false,
+                "지금은 초기화할 사용량 한도가 없어 사용되지 않았습니다."),
+            "noCredit" => new ResetRedeemResult(
+                false,
+                "사용할 수 있는 리셋 티켓이 없습니다."),
+            "alreadyRedeemed" => new ResetRedeemResult(
+                false,
+                "이미 사용된 요청입니다. 사용량을 새로고침합니다."),
+            _ => new ResetRedeemResult(
+                false,
+                "알 수 없는 응답입니다. 새로고침 후 확인해 주세요.")
+        };
 
     private async Task<UsageSnapshot> FetchWithRetriesAsync(
         string executablePath,

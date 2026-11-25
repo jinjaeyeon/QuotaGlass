@@ -7,6 +7,11 @@ public sealed class UsageRefreshService(IReadOnlyList<IUsageProvider> providers)
 {
     public int ProviderCount => providers.Count;
 
+    public TProvider? FindProvider<TProvider>(string providerId)
+        where TProvider : class =>
+        providers.FirstOrDefault(provider =>
+            provider.ProviderId == providerId) as TProvider;
+
     public async Task<IReadOnlyList<UsageSnapshot>> RefreshAsync(
         CancellationToken cancellationToken)
     {

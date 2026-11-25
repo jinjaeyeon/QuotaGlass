@@ -6,7 +6,9 @@ using QuotaGlass.Models;
 
 namespace QuotaGlass.Services;
 
-public sealed class ClaudeCodeUsageProvider : IUsageProvider
+public sealed class ClaudeCodeUsageProvider :
+    IUsageProvider,
+    IResetCreditRedeemer
 {
     private static readonly TimeSpan UsageStartupTimeout =
         TimeSpan.FromSeconds(10);
@@ -37,6 +39,19 @@ public sealed class ClaudeCodeUsageProvider : IUsageProvider
     public string DisplayName => installation.DisplayName;
     public string IconText => installation.IconText;
     public string AccountLabel => installation.AccountLabel;
+
+    public async Task<ResetRedeemResult> RedeemResetCreditAsync(
+        ResetCreditRedeemOption option,
+        string requestId,
+        CancellationToken cancellationToken)
+    {
+        var result = await usageApiClient.ClaimResetAsync(
+            option.GrantId,
+            requestId,
+            installation.Version,
+            cancellationToken);
+        return ClaudeResetMessages.Describe(result);
+    }
 
     // 리셋 티켓은 부가 정보이므로 조회에 실패해도 사용량 표시는 유지한다.
     private async Task<ResetCreditSummary?> TryFetchResetCreditsAsync(

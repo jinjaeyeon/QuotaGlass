@@ -316,15 +316,16 @@
                                         </TextBlock.Style>
                                     </TextBlock>
 
-                                    <TextBlock Grid.Row="4"
-                                               Grid.Column="1"
-                                               Grid.ColumnSpan="2"
-                                               Margin="0,7,0,0"
-                                               Foreground="{DynamicResource MutedTextBrush}"
-                                               FontSize="11"
-                                               Text="{Binding ResetCreditSummaryText}">
-                                        <TextBlock.Style>
-                                            <Style TargetType="TextBlock">
+                                    <Grid Grid.Row="4"
+                                          Grid.Column="1"
+                                          Grid.ColumnSpan="2"
+                                          Margin="0,7,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.Style>
+                                            <Style TargetType="Grid">
                                                 <Setter Property="Visibility" Value="Visible" />
                                                 <Style.Triggers>
                                                     <DataTrigger Binding="{Binding HasResetCreditSummary}"
@@ -333,8 +334,40 @@
                                                     </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>
-                                        </TextBlock.Style>
-                                    </TextBlock>
+                                        </Grid.Style>
+
+                                        <TextBlock VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource MutedTextBrush}"
+                                                   FontSize="11"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   ToolTip="{Binding ResetCreditSummaryText}"
+                                                   Text="{Binding ResetCreditSummaryText}" />
+
+                                        <Button Grid.Column="1"
+                                                Padding="8,3"
+                                                Margin="10,0,0,0"
+                                                FontSize="10"
+                                                Content="티켓 사용"
+                                                ToolTip="{Binding RedeemToolTip}"
+                                                ToolTipService.ShowOnDisabled="True"
+                                                Command="{Binding RedeemCommand}">
+                                            <Button.Style>
+                                                <Style TargetType="Button"
+                                                       BasedOn="{StaticResource {x:Type Button}}">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding HasRedeemOption}"
+                                                                     Value="True">
+                                                            <Setter Property="Visibility" Value="Visible" />
+                                                        </DataTrigger>
+                                                        <Trigger Property="IsEnabled" Value="False">
+                                                            <Setter Property="Opacity" Value="0.5" />
+                                                        </Trigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                        </Button>
+                                    </Grid>
 
                                     <ItemsControl Grid.Row="5"
                                                   Grid.Column="1"

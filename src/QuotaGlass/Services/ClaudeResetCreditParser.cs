@@ -35,11 +35,34 @@ internal sealed record ClaudeResetStatus(
             .Where(grant => grant.EndsAt is not null)
             .Select(grant => grant.EndsAt)
             .Min();
+        var target = SelectTarget(now);
         return new ResetCreditSummary(
             held.Sum(grant => grant.ResetsLeft),
-            earliest);
+            earliest,
+            target is null
+                ? null
+                : new ResetCreditRedeemOption(
+                    target.Id,
+                    target.Label,
+                    target.Kind,
+                    target.ResetsLeft,
+                    target.EndsAt,
+                    target.UsableNow,
+                    target.UnavailableReason));
     }
 
+    /// <summary>
+    /// 서버는 next_grant_id가 아닌 티켓 사용을 거부(not_next_grant)하므로
+    /// 서버가 지정한 티켓을 우선하고, 없으면 만료가 가장 빠른 티켓을 고른다.
+    /// </summary>
+    public ClaudeResetGrant? SelectTarget(DateTimeOffset now)
+    {
+        var held = Grants.Where(grant => IsUsable(grant, now)).ToArray();
+        return held.FirstOrDefault(grant => grant.Id == NextGrantId) ??
+               held
+                   .OrderBy(grant => grant.EndsAt ?? DateTimeOffset.MaxValue)
+                   .FirstOrDefault();
+    }
 }
 
 internal static class ClaudeResetCreditParser

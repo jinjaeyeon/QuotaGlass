@@ -19,7 +19,13 @@ if (args.Contains("--reset-credits", StringComparer.Ordinal))
         liveCredits is null
             ? "Claude 리셋 티켓: 없음 또는 조회 대상 아님"
             : $"Claude 리셋 티켓 {liveCredits.AvailableCount}장 · " +
-              $"가장 이른 기한 {liveCredits.EarliestExpiresAt:O}");
+              $"가장 이른 기한 {liveCredits.EarliestExpiresAt:O} · " +
+              (liveCredits.Redeem is { } target
+                  ? $"사용 대상 {target.Kind}/{target.Label} " +
+                    $"남은 {target.ResetsLeft}장, 기한 {target.ExpiresAt:O}, " +
+                    $"지금 사용 가능 {target.UsableNow}, " +
+                    $"불가 사유 {target.UnavailableReason ?? "-"}"
+                  : "사용 대상 없음"));
     return;
 }
 
@@ -738,6 +744,17 @@ Require(
     DateTimeOffset.Parse("2026-12-05T00:00:00Z"),
     "Claude 가장 이른 만료는 사용 가능한 티켓 기준");
 Require(
+    claudeResetSummary?.Redeem?.GrantId == "grant-b",
+    "Claude 사용 대상은 서버 next_grant_id이자 가장 빨리 만료되는 티켓");
+
+var claudeResetNoNext = ClaudeResetCreditParser.Parse(
+    claudeResetFixture.Replace(
+        "\"next_grant_id\": \"grant-b\"",
+        "\"next_grant_id\": null"));
+Require(
+    claudeResetNoNext!.SelectTarget(claudeResetNow)?.Id == "grant-b",
+    "next_grant_id가 없으면 만료가 가장 빠른 티켓 선택");
+Require(
     ClaudeResetCreditParser.Parse(
         """{"cedar_ember":{"eligible":false,"ineligible_reason":"surface","grants":[]}}""")
     is null,
@@ -761,12 +778,202 @@ var claudeResetViewModel = new ProviderUsageViewModel(
         claudeResetNow,
         "test",
         ResetCredits: claudeResetSummary),
-    claudeResetNow);
+    claudeResetNow,
+    _ => Task.CompletedTask);
 Require(
     claudeResetViewModel.ResetCreditSummaryText?.Contains(
         "리셋 티켓 3장",
         StringComparison.Ordinal) == true,
     "Claude 리셋 티켓 카드 문구");
+Require(
+    claudeResetViewModel.HasRedeemOption &&
+    claudeResetViewModel.RedeemCommand!.CanExecute(null),
+    "사용 가능한 티켓이 있으면 사용 버튼 활성화");
+var blockedResetViewModel = new ProviderUsageViewModel(
+    new UsageSnapshot(
+        "claude-code",
+        "Claude Code",
+        "C",
+        "test",
+        [],
+        claudeResetNow,
+        "test",
+        ResetCredits: claudeResetSummary! with
+        {
+            Redeem = claudeResetSummary.Redeem! with
+            {
+                UsableNow = false,
+                UnavailableReason = "needs_limit"
+            }
+        }),
+    claudeResetNow,
+    _ => Task.CompletedTask);
+Require(
+    !blockedResetViewModel.RedeemCommand!.CanExecute(null) &&
+    blockedResetViewModel.RedeemToolTip!.Contains(
+        "한도에 도달",
+        StringComparison.Ordinal),
+    "usable_now=false면 버튼 비활성화 및 사유 표시");
+
+Require(
+    ClaudeUsageApiClient.ParseClaimResponse(
+        HttpStatusCode.OK,
+        """{"result":"reset","resets_left":2}""") is
+    { Outcome: ResetClaimOutcome.Success, ResetsLeft: 2 },
+    "claim 성공 응답 파싱");
+Require(
+    ClaudeUsageApiClient.ParseClaimResponse(
+        HttpStatusCode.OK,
+        """{"result":"not_limited"}""").Outcome ==
+    ResetClaimOutcome.NotLimited,
+    "claim not_limited 응답 파싱");
+Require(
+    ClaudeUsageApiClient.ParseClaimResponse(
+        HttpStatusCode.TooManyRequests,
+        null).Outcome == ResetClaimOutcome.RateLimited,
+    "claim 429 처리");
+Require(
+    ClaudeUsageApiClient.ParseClaimResponse(
+        HttpStatusCode.OK,
+        "not json").Outcome == ResetClaimOutcome.Error,
+    "claim 깨진 응답은 오류 처리");
+
+{
+    var claimRequests = new List<(string Method, string Url, string? Body)>();
+    var claimHandler = new StubHttpMessageHandler(request =>
+    {
+        var url = request.RequestUri!.ToString();
+        var body = request.Content?.ReadAsStringAsync().GetAwaiter().GetResult();
+        claimRequests.Add((request.Method.Method, url, body));
+        string json;
+        if (url.Contains("/api/oauth/usage", StringComparison.Ordinal))
+        {
+            json = claudeResetFixture.Replace(
+                "2026-12-05T00:00:00Z",
+                DateTimeOffset.UtcNow.AddDays(10).ToString("O"));
+        }
+        else if (url.EndsWith("/api/oauth/profile", StringComparison.Ordinal))
+        {
+            json = """{"organization":{"uuid":"org-123"}}""";
+        }
+        else
+        {
+            json = """{"result":"reset","resets_left":2}""";
+        }
+
+        return new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        };
+    });
+    using var claimClient = new HttpClient(claimHandler);
+    var claimExpiration = DateTimeOffset.UtcNow
+        .AddHours(1)
+        .ToUnixTimeMilliseconds();
+    var claimApiClient = new ClaudeUsageApiClient(
+        claimClient,
+        [new FixedClaudeCredentialStore("claim-token", claimExpiration)]);
+
+    var claimed = await claimApiClient.ClaimResetAsync(
+        "grant-b",
+        "request-1",
+        "2.1.229",
+        CancellationToken.None);
+    var claimPost = claimRequests.Single(item => item.Method == "POST");
+    Require(
+        claimed.Outcome == ResetClaimOutcome.Success,
+        "claim 흐름 성공");
+    Require(
+        claimPost.Url ==
+        "https://api.anthropic.com/api/organizations/org-123/reset_rate_limits",
+        "claim 요청 URL은 프로필의 organization uuid 사용");
+    using (var claimBody = JsonDocument.Parse(claimPost.Body!))
+    {
+        Require(
+            claimBody.RootElement.GetProperty("program").GetString() ==
+            "cedar_ember" &&
+            claimBody.RootElement.GetProperty("grant_id").GetString() ==
+            "grant-b" &&
+            claimBody.RootElement.GetProperty("request_id").GetString() ==
+            "request-1",
+            "claim 요청 본문(program/grant_id/request_id)");
+    }
+
+    claimRequests.Clear();
+    var unusable = await claimApiClient.ClaimResetAsync(
+        "grant-d",
+        "request-2",
+        "2.1.229",
+        CancellationToken.None);
+    Require(
+        unusable.Outcome == ResetClaimOutcome.NotUsable &&
+        claimRequests.All(item => item.Method == "GET"),
+        "일시중지/사용 불가 티켓은 POST를 보내지 않음");
+
+    claimRequests.Clear();
+    var unknown = await claimApiClient.ClaimResetAsync(
+        "no-such-grant",
+        "request-3",
+        "2.1.229",
+        CancellationToken.None);
+    Require(
+        unknown.Outcome == ResetClaimOutcome.Unavailable &&
+        claimRequests.All(item => item.Method == "GET"),
+        "알 수 없는 grant는 POST를 보내지 않음");
+}
+
+// ---- 리셋 티켓: Codex 사용 대상 선택 / consume 요청 ----
+using (var codexRedeemDocument = JsonDocument.Parse(
+           """
+           {
+             "rateLimitResetCredits": {
+               "availableCount": 3,
+               "credits": [
+                 { "id": "late", "status": "available", "title": "나중",
+                   "resetType": "weekly", "expiresAt": 1790000000 },
+                 { "id": "never", "status": "available", "expiresAt": null },
+                 { "id": "soon", "status": "available", "title": "곧 만료",
+                   "resetType": "fiveHour", "expiresAt": 1784876400 },
+                 { "id": "used", "status": "redeemed", "expiresAt": 1700000000 }
+               ]
+             }
+           }
+           """))
+{
+    var codexRedeemSummary = CodexRateLimitResetCreditParser.Parse(
+        codexRedeemDocument.RootElement);
+    Require(
+        codexRedeemSummary?.Redeem?.GrantId == "soon" &&
+        codexRedeemSummary.EarliestExpiresAt ==
+        DateTimeOffset.FromUnixTimeSeconds(1784876400),
+        "Codex 사용 대상은 가장 빨리 만료되는 available 티켓");
+}
+
+using (var consumeRequest = JsonDocument.Parse(
+           CodexAppServerUsageProvider.BuildConsumeResetCreditRequest(
+               "soon",
+               "key-1")))
+{
+    var consumeParams = consumeRequest.RootElement.GetProperty("params");
+    Require(
+        consumeRequest.RootElement.GetProperty("method").GetString() ==
+        "account/rateLimitResetCredit/consume" &&
+        consumeParams.GetProperty("creditId").GetString() == "soon" &&
+        consumeParams.GetProperty("idempotencyKey").GetString() == "key-1",
+        "Codex consume 요청 형식");
+}
+
+using (var consumeReset = JsonDocument.Parse("""{"outcome":"reset"}"""))
+using (var consumeNothing = JsonDocument.Parse(
+           """{"outcome":"nothingToReset"}"""))
+{
+    Require(
+        CodexAppServerUsageProvider.DescribeConsumeOutcome(
+            consumeReset.RootElement).Succeeded &&
+        !CodexAppServerUsageProvider.DescribeConsumeOutcome(
+            consumeNothing.RootElement).Succeeded,
+        "Codex consume 결과 해석");
+}
 
 if (args.Contains("--integration", StringComparer.Ordinal))
 {

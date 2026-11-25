@@ -193,10 +193,73 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                     ShouldRefreshProvider(installation.ProviderId)
                         ? "사용량 확인 중…"
                         : "메인 창과 위젯에서 숨겨져 갱신하지 않음"),
-                now));
+                now,
+                RedeemResetCreditAsync));
         }
         UpdateProviderVisibility();
         ReloadManagedCliOptions(installations);
+    }
+
+    /// <summary>
+    /// 리셋 티켓을 사용한다. 되돌릴 수 없으므로 반드시 사용자 확인을 거친다.
+    /// 어떤 티켓을 쓸지는 provider가 정한 대상(가장 빨리 만료되는 티켓)이다.
+    /// </summary>
+    private async Task RedeemResetCreditAsync(
+        ProviderUsageViewModel provider)
+    {
+        var option = provider.RedeemOption;
+        var redeemer = _refreshService
+            .FindProvider<IResetCreditRedeemer>(provider.Provider);
+        if (option is null || redeemer is null || !option.UsableNow)
+        {
+            return;
+        }
+
+        var confirmation = System.Windows.MessageBox.Show(
+            $"{provider.DisplayName}의 {ProviderUsageViewModel.DescribeKind(option)} " +
+            "티켓을 지금 사용할까요?\n\n" +
+            $"· 사용할 티켓 만료: {ProviderUsageViewModel.FormatExpiry(option)}\n" +
+            $"· 이 종류의 남은 티켓: {option.ResetsLeft}장\n" +
+            "· 가장 빨리 만료되는 티켓부터 사용합니다.\n\n" +
+            "사용하면 되돌릴 수 없습니다.",
+            "리셋 티켓 사용",
+            System.Windows.MessageBoxButton.YesNo,
+            System.Windows.MessageBoxImage.Warning,
+            System.Windows.MessageBoxResult.No);
+        if (confirmation != System.Windows.MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        // 클릭 한 번당 요청 ID 하나. 같은 ID로 재시도해도 중복 사용되지 않는다.
+        var requestId = Guid.NewGuid().ToString("N");
+        UpdateSummary = "리셋 티켓 사용 중…";
+        ResetRedeemResult result;
+        try
+        {
+            using var timeout = new CancellationTokenSource(
+                TimeSpan.FromSeconds(30));
+            result = await redeemer.RedeemResetCreditAsync(
+                option,
+                requestId,
+                timeout.Token);
+        }
+        catch (Exception exception)
+        {
+            result = new ResetRedeemResult(
+                false,
+                "리셋 티켓 사용 결과를 확인하지 못했습니다. 사용되었을 수 있으니 " +
+                $"새로고침 후 확인해 주세요. ({exception.Message})");
+        }
+
+        System.Windows.MessageBox.Show(
+            result.Message,
+            "리셋 티켓 사용",
+            System.Windows.MessageBoxButton.OK,
+            result.Succeeded
+                ? System.Windows.MessageBoxImage.Information
+                : System.Windows.MessageBoxImage.Warning);
+        await RefreshAsync();
     }
 
     private Task ReloadProvidersAndRefreshAsync()
@@ -255,7 +318,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         snapshot = PreserveLastUsage(
             snapshot,
             existingProvider?.Snapshot);
-        var updatedProvider = new ProviderUsageViewModel(snapshot, now);
+        var updatedProvider = new ProviderUsageViewModel(
+            snapshot,
+            now,
+            RedeemResetCreditAsync);
 
         for (var index = 0; index < Providers.Count; index++)
         {

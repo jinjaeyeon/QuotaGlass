@@ -15,6 +15,9 @@ internal sealed class ClaudeUsageApiClient
     private const string ResetCreditUsageEndpoint =
         "https://api.anthropic.com/api/oauth/usage" +
         "?cedar_ember=1&skip_spend=1";
+    private const string ProfileEndpoint =
+        "https://api.anthropic.com/api/oauth/profile";
+    private const string ResetProgram = "cedar_ember";
     private const string TokenEndpoint =
         "https://platform.claude.com/v1/oauth/token";
     private static readonly HttpClient DefaultClient = CreateHttpClient();
@@ -155,6 +158,146 @@ internal sealed class ClaudeUsageApiClient
         return null;
     }
 
+    /// <summary>
+    /// 리셋 티켓 1장을 사용한다. 되돌릴 수 없는 호출이므로 호출 직전에 상태를
+    /// 다시 조회해 같은 계정의 사용 가능한 티켓인지 확인한다.
+    /// requestId는 클릭 한 번당 하나만 만들어 재시도에도 재사용한다.
+    /// </summary>
+    public async Task<ResetClaimResult> ClaimResetAsync(
+        string grantId,
+        string requestId,
+        string? cliVersion,
+        CancellationToken cancellationToken)
+    {
+        foreach (var credentialStore in credentialStores)
+        {
+            var status = await TryReadResetStatusAsync(
+                credentialStore,
+                cliVersion,
+                cancellationToken);
+            var grant = status?.Status.Grants.FirstOrDefault(item =>
+                item.Id == grantId);
+            if (status is null || grant is null)
+            {
+                continue;
+            }
+
+            if (!status.Value.Status.IsUsable(grant, DateTimeOffset.UtcNow) ||
+                !grant.UsableNow)
+            {
+                return new ResetClaimResult(
+                    ResetClaimOutcome.NotUsable,
+                    grant.UnavailableReason,
+                    null);
+            }
+
+            var token = status.Value.Credentials.AccessToken;
+            var organizationId = await ReadOrganizationIdAsync(
+                token,
+                cliVersion,
+                cancellationToken);
+            if (organizationId is null)
+            {
+                return new ResetClaimResult(
+                    ResetClaimOutcome.AuthError,
+                    "organization",
+                    null);
+            }
+
+            var response = await SendAsync(
+                HttpMethod.Post,
+                "https://api.anthropic.com/api/organizations/" +
+                $"{Uri.EscapeDataString(organizationId)}/reset_rate_limits",
+                token,
+                cliVersion,
+                JsonContent.Create(
+                    new
+                    {
+                        program = ResetProgram,
+                        grant_id = grantId,
+                        request_id = requestId
+                    }),
+                readBodyOnFailure: true,
+                cancellationToken);
+            return ParseClaimResponse(response.StatusCode, response.Body);
+        }
+
+        return new ResetClaimResult(
+            ResetClaimOutcome.Unavailable,
+            null,
+            null);
+    }
+
+    internal static ResetClaimResult ParseClaimResponse(
+        HttpStatusCode statusCode,
+        string? body)
+    {
+        if (statusCode == HttpStatusCode.TooManyRequests)
+        {
+            return new ResetClaimResult(
+                ResetClaimOutcome.RateLimited,
+                null,
+                null);
+        }
+
+        if (statusCode is
+            HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+        {
+            return new ResetClaimResult(
+                ResetClaimOutcome.AuthError,
+                null,
+                null);
+        }
+
+        if (string.IsNullOrWhiteSpace(body))
+        {
+            return new ResetClaimResult(ResetClaimOutcome.Error, null, null);
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(body);
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                return new ResetClaimResult(
+                    ResetClaimOutcome.Error,
+                    null,
+                    null);
+            }
+
+            var result = root.TryGetProperty("result", out var resultElement) &&
+                         resultElement.ValueKind == JsonValueKind.String
+                ? resultElement.GetString()
+                : null;
+            var reason = root.TryGetProperty("reason", out var reasonElement) &&
+                         reasonElement.ValueKind == JsonValueKind.String
+                ? reasonElement.GetString()
+                : null;
+            long? resetsLeft =
+                root.TryGetProperty("resets_left", out var leftElement) &&
+                leftElement.ValueKind == JsonValueKind.Number &&
+                leftElement.TryGetInt64(out var left)
+                    ? left
+                    : null;
+            var outcome = result switch
+            {
+                "reset" => ResetClaimOutcome.Success,
+                "already_used" => ResetClaimOutcome.AlreadyUsed,
+                "not_limited" => ResetClaimOutcome.NotLimited,
+                "cooldown" => ResetClaimOutcome.Cooldown,
+                "ineligible" => ResetClaimOutcome.Ineligible,
+                "unavailable" => ResetClaimOutcome.Unavailable,
+                _ => ResetClaimOutcome.Error
+            };
+            return new ResetClaimResult(outcome, reason, resetsLeft);
+        }
+        catch (JsonException)
+        {
+            return new ResetClaimResult(ResetClaimOutcome.Error, null, null);
+        }
+    }
+
     private async Task<(ClaudeResetStatus Status,
         ClaudeOAuthCredentials Credentials)?> TryReadResetStatusAsync(
         IClaudeCredentialStore credentialStore,
@@ -185,6 +328,41 @@ internal sealed class ClaudeUsageApiClient
             return ClaudeResetCreditParser.Parse(
                     result.Value.Response.Body) is { } status
                 ? (status, result.Value.Credentials)
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private async Task<string?> ReadOrganizationIdAsync(
+        string accessToken,
+        string? cliVersion,
+        CancellationToken cancellationToken)
+    {
+        var response = await SendAsync(
+            HttpMethod.Get,
+            ProfileEndpoint,
+            accessToken,
+            cliVersion,
+            content: null,
+            readBodyOnFailure: false,
+            cancellationToken);
+        if (!response.IsSuccess || string.IsNullOrWhiteSpace(response.Body))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(response.Body);
+            return document.RootElement.TryGetProperty(
+                       "organization",
+                       out var organization) &&
+                   organization.ValueKind == JsonValueKind.Object &&
+                   TryReadString(organization, "uuid", out var uuid)
+                ? uuid
                 : null;
         }
         catch (JsonException)
@@ -529,3 +707,22 @@ internal sealed class ClaudeUsageApiClient
             (int)StatusCode <= 299;
     }
 }
+
+internal enum ResetClaimOutcome
+{
+    Success,
+    AlreadyUsed,
+    NotLimited,
+    Cooldown,
+    Ineligible,
+    Unavailable,
+    NotUsable,
+    RateLimited,
+    AuthError,
+    Error
+}
+
+internal sealed record ResetClaimResult(
+    ResetClaimOutcome Outcome,
+    string? Reason,
+    long? ResetsLeft);
