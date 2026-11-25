@@ -302,20 +302,18 @@ public sealed class AntigravityUsageProvider(
             $"antigravity-{Guid.NewGuid():N}.log");
         var csrfToken = Guid.NewGuid().ToString();
 
+        // agy는 콘솔이 있어야 초기화되므로 stdio를 리다이렉트하지 않는다
+        // (리다이렉트하면 초기화되지 않고 멈춘다). CreateNoWindow는 창 없는
+        // 숨김 콘솔만 만든다. conhost.exe를 따로 띄우면 기본 터미널
+        // (Windows Terminal) 창이 순간적으로 깜빡일 수 있다.
         var startInfo = new ProcessStartInfo
         {
-            FileName = "conhost.exe",
+            FileName = cliPath,
             WorkingDirectory = Environment.GetFolderPath(
                 Environment.SpecialFolder.UserProfile),
             UseShellExecute = false,
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true,
-            WindowStyle = ProcessWindowStyle.Hidden
+            CreateNoWindow = true
         };
-        startInfo.ArgumentList.Add("--headless");
-        startInfo.ArgumentList.Add(cliPath);
         startInfo.ArgumentList.Add("--log-file");
         startInfo.ArgumentList.Add(logPath);
         AddCliCsrfArguments(startInfo, csrfToken);
@@ -323,10 +321,6 @@ public sealed class AntigravityUsageProvider(
         using var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException(
                 "Antigravity quota reader를 시작하지 못했습니다.");
-        var outputTask = process.StandardOutput.ReadToEndAsync(
-            cancellationToken);
-        var errorTask = process.StandardError.ReadToEndAsync(
-            cancellationToken);
 
         try
         {
@@ -409,14 +403,6 @@ public sealed class AntigravityUsageProvider(
             }
 
             await process.WaitForExitAsync(CancellationToken.None);
-            try
-            {
-                _ = await outputTask;
-                _ = await errorTask;
-            }
-            catch (OperationCanceledException)
-            {
-            }
 
             try
             {
