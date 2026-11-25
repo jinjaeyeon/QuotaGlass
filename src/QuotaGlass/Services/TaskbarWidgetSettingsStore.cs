@@ -36,6 +36,52 @@ internal static class TaskbarWidgetSettingsStore
         "QuotaGlass",
         "taskbar-widget-resource-metrics.txt");
 
+    private static readonly string ProviderCardWidthPath = Path.Combine(
+        Environment.GetFolderPath(
+            Environment.SpecialFolder.LocalApplicationData),
+        "QuotaGlass",
+        "taskbar-widget-card-width.txt");
+
+    public static double? LoadProviderCardWidth()
+    {
+        try
+        {
+            return File.Exists(ProviderCardWidthPath) &&
+                   double.TryParse(
+                       File.ReadAllText(ProviderCardWidthPath),
+                       NumberStyles.Float,
+                       CultureInfo.InvariantCulture,
+                       out var width) &&
+                   double.IsFinite(width)
+                ? width
+                : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public static void SaveProviderCardWidth(double width)
+    {
+        try
+        {
+            var directory = Path.GetDirectoryName(ProviderCardWidthPath);
+            if (!string.IsNullOrWhiteSpace(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            File.WriteAllText(
+                ProviderCardWidthPath,
+                width.ToString("0.##", CultureInfo.InvariantCulture));
+        }
+        catch
+        {
+            // A read-only profile must not prevent the widget from working.
+        }
+    }
+
     public static bool LoadFreeMovementEnabled()
     {
         try

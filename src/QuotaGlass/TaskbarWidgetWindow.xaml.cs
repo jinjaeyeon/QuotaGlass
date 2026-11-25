@@ -37,6 +37,9 @@ public partial class TaskbarWidgetWindow : Window
     private const double CompactResourceMetricsWidth = 86;
     private const double VerticalProviderGraphWidth = 120;
     private const double VerticalTaskbarWidgetWidth = 30;
+    private const double DefaultProviderCardWidth = 120;
+    private const double MinProviderCardWidth = 80;
+    private const double MaxProviderCardWidth = 400;
     private const int MaxWidgetTransparencyPercent = 75;
     private static readonly nint HwndTopmost = new(-1);
     private readonly Action _openFullWindow;
@@ -68,6 +71,12 @@ public partial class TaskbarWidgetWindow : Window
         _taskbarMonitorPosition;
     private bool _isPointerDown;
     private bool _isDragging;
+    private bool _isResizing;
+    private bool _isResizingFromLeft;
+    private NativePoint _resizeStartCursor;
+    private NativeRect _resizeStartWindow;
+    private double _resizeStartCardWidth;
+    private double _savedProviderCardWidth = DefaultProviderCardWidth;
     private bool _isHiddenAutomatically;
     private bool _isClosed;
     private string? _updateStatusText;
@@ -85,6 +94,20 @@ public partial class TaskbarWidgetWindow : Window
             typeof(bool),
             typeof(TaskbarWidgetWindow),
             new PropertyMetadata(false));
+
+    public static readonly DependencyProperty ProviderCardWidthProperty =
+        DependencyProperty.Register(
+            nameof(ProviderCardWidth),
+            typeof(double),
+            typeof(TaskbarWidgetWindow),
+            new PropertyMetadata(DefaultProviderCardWidth));
+
+    // 제공자 카드 한 칸의 너비. 자유 이동 모드에서만 사용자가 조절할 수 있다.
+    public double ProviderCardWidth
+    {
+        get => (double)GetValue(ProviderCardWidthProperty);
+        private set => SetValue(ProviderCardWidthProperty, value);
+    }
 
     public bool IsVerticalLayout
     {
@@ -130,6 +153,11 @@ public partial class TaskbarWidgetWindow : Window
             TaskbarWidgetPlacementStore.LoadTaskbarMonitorPosition();
         _freeMovementEnabled =
             TaskbarWidgetSettingsStore.LoadFreeMovementEnabled();
+        _savedProviderCardWidth = Math.Clamp(
+            TaskbarWidgetSettingsStore.LoadProviderCardWidth() ??
+            DefaultProviderCardWidth,
+            MinProviderCardWidth,
+            MaxProviderCardWidth);
         _verticalLayoutEnabled =
             TaskbarWidgetSettingsStore.LoadVerticalLayoutEnabled();
         _widgetTransparencyPercent =
@@ -807,6 +835,115 @@ public partial class TaskbarWidgetWindow : Window
         object sender,
         RoutedEventArgs e) =>
         _exitApplication();
+
+    private void ResetWidthMenuItem_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        _savedProviderCardWidth = DefaultProviderCardWidth;
+        TaskbarWidgetSettingsStore.SaveProviderCardWidth(
+            DefaultProviderCardWidth);
+        ApplyWidgetLayout();
+        UpdateLayout();
+        PositionWidget();
+    }
+
+    private void ResizeGrip_MouseLeftButtonDown(
+        object sender,
+        MouseButtonEventArgs e)
+    {
+        if (!_freeMovementEnabled ||
+            !GetCursorPos(out _resizeStartCursor) ||
+            !GetWindowRect(
+                new WindowInteropHelper(this).Handle,
+                out _resizeStartWindow))
+        {
+            return;
+        }
+
+        _isResizing = true;
+        _isResizingFromLeft = ReferenceEquals(sender, ResizeGripLeft);
+        _resizeStartCardWidth = ProviderCardWidth;
+        ((UIElement)sender).CaptureMouse();
+        e.Handled = true;
+    }
+
+    private void ResizeGrip_MouseMove(
+        object sender,
+        System.Windows.Input.MouseEventArgs e)
+    {
+        if (!_isResizing ||
+            e.LeftButton != MouseButtonState.Pressed ||
+            !GetCursorPos(out var cursor))
+        {
+            return;
+        }
+
+        var scale = PresentationSource.FromVisual(this)
+            ?.CompositionTarget?.TransformToDevice.M11 ?? 1.0;
+        var deltaPixels = cursor.X - _resizeStartCursor.X;
+        if (_isResizingFromLeft)
+        {
+            deltaPixels = -deltaPixels;
+        }
+
+        // 가로 배치에서는 카드 수만큼 전체 너비가 늘어난다.
+        var cardCount = IsVerticalLayout
+            ? 1
+            : Math.Max(1, WidgetProviders.Count);
+        var cardWidth = Math.Round(
+            Math.Clamp(
+                _resizeStartCardWidth + deltaPixels / scale / cardCount,
+                MinProviderCardWidth,
+                MaxProviderCardWidth));
+        if (Math.Abs(cardWidth - ProviderCardWidth) < 0.5)
+        {
+            e.Handled = true;
+            return;
+        }
+
+        ProviderCardWidth = cardWidth;
+        if (IsVerticalLayout)
+        {
+            ResourceMetricsBorder.Width = cardWidth;
+        }
+
+        UpdateLayout();
+        if (_isResizingFromLeft)
+        {
+            // 왼쪽 그립은 오른쪽 모서리를 고정한 채 왼쪽으로 늘어난다.
+            var width = (int)Math.Ceiling(ActualWidth * scale);
+            _screenPosition = new TaskbarWidgetPlacementStore.ScreenPosition(
+                _resizeStartWindow.Right - width,
+                _resizeStartWindow.Top);
+        }
+
+        PositionOnScreen();
+        e.Handled = true;
+    }
+
+    private void ResizeGrip_MouseLeftButtonUp(
+        object sender,
+        MouseButtonEventArgs e)
+    {
+        if (!_isResizing)
+        {
+            return;
+        }
+
+        ((UIElement)sender).ReleaseMouseCapture();
+        _isResizing = false;
+        _savedProviderCardWidth = ProviderCardWidth;
+        TaskbarWidgetSettingsStore.SaveProviderCardWidth(ProviderCardWidth);
+        if (_screenPosition is { } position)
+        {
+            TaskbarWidgetPlacementStore.SaveScreenPosition(
+                position.X,
+                position.Y);
+        }
+
+        e.Handled = true;
+    }
 
     private void WidgetChrome_MouseMove(
         object sender,
@@ -1487,6 +1624,7 @@ public partial class TaskbarWidgetWindow : Window
         FreeMovementCheckGlyph.Text = _freeMovementEnabled
             ? "✓"
             : string.Empty;
+        ResetWidthMenuItem.IsEnabled = _freeMovementEnabled;
         UpdateVerticalLayoutMenuItem();
     }
 
@@ -1696,14 +1834,30 @@ public partial class TaskbarWidgetWindow : Window
         ResourceMetricsPanel.Orientation = useVerticalLayout
             ? System.Windows.Controls.Orientation.Vertical
             : System.Windows.Controls.Orientation.Horizontal;
+        // 너비 조절은 자유 이동 모드에서만. 그 외에는 항상 기본 너비.
+        if (!_isResizing)
+        {
+            ProviderCardWidth = _freeMovementEnabled
+                ? _savedProviderCardWidth
+                : DefaultProviderCardWidth;
+        }
+
         ResourceMetricsBorder.Width = isDockedToVerticalTaskbar
             ? VerticalTaskbarWidgetWidth
             : useVerticalLayout
-                ? VerticalProviderGraphWidth
+                ? ProviderCardWidth
                 : CompactResourceMetricsWidth;
         ResourceMetricsBorder.Padding = isDockedToVerticalTaskbar
             ? new System.Windows.Thickness(2)
             : new System.Windows.Thickness(5, 2, 5, 2);
+        WidgetChrome.Cursor = _freeMovementEnabled
+            ? System.Windows.Input.Cursors.SizeAll
+            : System.Windows.Input.Cursors.SizeWE;
+        var canResize = _freeMovementEnabled && WidgetProviders.Count > 0;
+        ResizeGripLeft.Visibility = canResize
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        ResizeGripRight.Visibility = ResizeGripLeft.Visibility;
         ResourceMetricsBorder.HorizontalAlignment =
             System.Windows.HorizontalAlignment.Left;
         IsVerticalLayout = useVerticalLayout;

@@ -427,6 +427,17 @@
                                        Text="⌖" />
                         </MenuItem.Icon>
                     </MenuItem>
+                    <MenuItem x:Name="ResetWidthMenuItem"
+                              Header="위젯 너비 초기화"
+                              ToolTip="자유 이동 모드에서 조절한 너비를 기본값으로 되돌립니다"
+                              Click="ResetWidthMenuItem_Click">
+                        <MenuItem.Icon>
+                            <TextBlock HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       FontSize="13"
+                                       Text="↔" />
+                        </MenuItem.Icon>
+                    </MenuItem>
                 </MenuItem>
                 <MenuItem x:Name="AppSettingsMenuItem"
                           Header="앱 설정">
@@ -505,6 +516,30 @@
             </ContextMenu>
         </Border.ContextMenu>
         <Grid>
+            <Border x:Name="ResizeGripLeft"
+                    Width="6"
+                    Margin="-7,-4,0,-4"
+                    HorizontalAlignment="Left"
+                    Background="Transparent"
+                    Cursor="SizeWE"
+                    Panel.ZIndex="10"
+                    Visibility="Collapsed"
+                    ToolTip="좌우로 드래그해서 너비 조절"
+                    MouseLeftButtonDown="ResizeGrip_MouseLeftButtonDown"
+                    MouseMove="ResizeGrip_MouseMove"
+                    MouseLeftButtonUp="ResizeGrip_MouseLeftButtonUp" />
+            <Border x:Name="ResizeGripRight"
+                    Width="6"
+                    Margin="0,-4,-7,-4"
+                    HorizontalAlignment="Right"
+                    Background="Transparent"
+                    Cursor="SizeWE"
+                    Panel.ZIndex="10"
+                    Visibility="Collapsed"
+                    ToolTip="좌우로 드래그해서 너비 조절"
+                    MouseLeftButtonDown="ResizeGrip_MouseLeftButtonDown"
+                    MouseMove="ResizeGrip_MouseMove"
+                    MouseLeftButtonUp="ResizeGrip_MouseLeftButtonUp" />
             <StackPanel x:Name="WidgetContentPanel"
                         Orientation="Horizontal">
                 <ItemsControl x:Name="WidgetProvidersControl"
@@ -526,7 +561,7 @@
                         <DataTemplate>
                             <Grid ToolTip="{Binding CompactToolTip}">
                                 <Grid x:Name="WideProviderContent"
-                                      Width="120"
+                                      Width="{Binding ProviderCardWidth, ElementName=WidgetRoot}"
                                       Height="34">
                                     <Grid.Style>
                                         <Style TargetType="Grid">
