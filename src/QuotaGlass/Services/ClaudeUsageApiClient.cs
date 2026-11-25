@@ -12,6 +12,9 @@ internal sealed class ClaudeUsageApiClient
 {
     private const string UsageEndpoint =
         "https://api.anthropic.com/api/oauth/usage";
+    private const string ResetCreditUsageEndpoint =
+        "https://api.anthropic.com/api/oauth/usage" +
+        "?cedar_ember=1&skip_spend=1";
     private const string TokenEndpoint =
         "https://platform.claude.com/v1/oauth/token";
     private static readonly HttpClient DefaultClient = CreateHttpClient();
@@ -126,6 +129,156 @@ internal sealed class ClaudeUsageApiClient
         catch (JsonException)
         {
             return [];
+        }
+    }
+
+    /// <summary>
+    /// 보유 중인 리셋 티켓 요약을 읽는다. meter 조회와 분리되어 있어 실패해도
+    /// 사용량 표시에는 영향이 없다. 대상 계정이 아니면 null.
+    /// </summary>
+    public async Task<ResetCreditSummary?> FetchResetCreditsAsync(
+        string? cliVersion,
+        CancellationToken cancellationToken)
+    {
+        foreach (var credentialStore in credentialStores)
+        {
+            var status = await TryReadResetStatusAsync(
+                credentialStore,
+                cliVersion,
+                cancellationToken);
+            if (status is not null)
+            {
+                return status.Value.Status.ToSummary(DateTimeOffset.UtcNow);
+            }
+        }
+
+        return null;
+    }
+
+    private async Task<(ClaudeResetStatus Status,
+        ClaudeOAuthCredentials Credentials)?> TryReadResetStatusAsync(
+        IClaudeCredentialStore credentialStore,
+        string? cliVersion,
+        CancellationToken cancellationToken)
+    {
+        var result = await SendWithRefreshAsync(
+            credentialStore,
+            cliVersion,
+            token => SendAsync(
+                HttpMethod.Get,
+                ResetCreditUsageEndpoint,
+                token,
+                cliVersion,
+                content: null,
+                readBodyOnFailure: false,
+                cancellationToken),
+            cancellationToken);
+        if (result is null ||
+            !result.Value.Response.IsSuccess ||
+            string.IsNullOrWhiteSpace(result.Value.Response.Body))
+        {
+            return null;
+        }
+
+        try
+        {
+            return ClaudeResetCreditParser.Parse(
+                    result.Value.Response.Body) is { } status
+                ? (status, result.Value.Credentials)
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private async Task<(ApiResponse Response,
+        ClaudeOAuthCredentials Credentials)?> SendWithRefreshAsync(
+        IClaudeCredentialStore credentialStore,
+        string? cliVersion,
+        Func<string, Task<ApiResponse>> send,
+        CancellationToken cancellationToken)
+    {
+        var credentials = await credentialStore.ReadAsync(cancellationToken);
+        if (credentials is null)
+        {
+            return null;
+        }
+
+        if (!credentials.HasUsableAccessToken(DateTimeOffset.UtcNow))
+        {
+            credentials = await RefreshCredentialsAsync(
+                credentialStore,
+                credentials,
+                forceRefresh: false,
+                cliVersion,
+                cancellationToken);
+            if (credentials is null)
+            {
+                return null;
+            }
+        }
+
+        var response = await send(credentials.AccessToken);
+        if (response.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            credentials = await RefreshCredentialsAsync(
+                credentialStore,
+                credentials,
+                forceRefresh: true,
+                cliVersion,
+                cancellationToken);
+            if (credentials is null)
+            {
+                return null;
+            }
+
+            response = await send(credentials.AccessToken);
+        }
+
+        return (response, credentials);
+    }
+
+    private async Task<ApiResponse> SendAsync(
+        HttpMethod method,
+        string url,
+        string accessToken,
+        string? cliVersion,
+        HttpContent? content,
+        bool readBodyOnFailure,
+        CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(method, url)
+        {
+            Content = content
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            accessToken);
+        request.Headers.TryAddWithoutValidation(
+            "anthropic-beta",
+            ClaudeOAuthConstants.OAuthBetaHeader);
+        request.Headers.UserAgent.ParseAdd(BuildUserAgent(cliVersion));
+
+        try
+        {
+            using var response = await client.SendAsync(
+                request,
+                HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken);
+            var body = response.IsSuccessStatusCode || readBodyOnFailure
+                ? await response.Content.ReadAsStringAsync(cancellationToken)
+                : null;
+            return new ApiResponse(response.StatusCode, body);
+        }
+        catch (HttpRequestException)
+        {
+            return new ApiResponse(HttpStatusCode.ServiceUnavailable, null);
+        }
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return new ApiResponse(HttpStatusCode.RequestTimeout, null);
         }
     }
 

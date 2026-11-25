@@ -38,6 +38,24 @@ public sealed class ClaudeCodeUsageProvider : IUsageProvider
     public string IconText => installation.IconText;
     public string AccountLabel => installation.AccountLabel;
 
+    // 리셋 티켓은 부가 정보이므로 조회에 실패해도 사용량 표시는 유지한다.
+    private async Task<ResetCreditSummary?> TryFetchResetCreditsAsync(
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await usageApiClient.FetchResetCreditsAsync(
+                installation.Version,
+                cancellationToken);
+        }
+        catch (Exception exception) when (
+            exception is not OperationCanceledException ||
+            !cancellationToken.IsCancellationRequested)
+        {
+            return null;
+        }
+    }
+
     public async Task<UsageSnapshot> FetchAsync(
         CancellationToken cancellationToken)
     {
@@ -85,7 +103,9 @@ public sealed class ClaudeCodeUsageProvider : IUsageProvider
                 "Claude · 5시간/주간",
                 apiMeters,
                 DateTimeOffset.Now,
-                "Claude Desktop/CLI usage API");
+                "Claude Desktop/CLI usage API",
+                ResetCredits: await TryFetchResetCreditsAsync(
+                    cancellationToken));
         }
 
         if (installation.ExecutablePath is null)

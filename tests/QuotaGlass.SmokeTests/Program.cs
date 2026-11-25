@@ -10,6 +10,19 @@ using QuotaGlass.Models;
 using QuotaGlass.Services;
 using QuotaGlass.ViewModels;
 
+if (args.Contains("--reset-credits", StringComparer.Ordinal))
+{
+    // 읽기 전용 실계정 확인. 리셋 티켓을 사용(claim)하는 호출은 하지 않는다.
+    var liveCredits = await new ClaudeUsageApiClient()
+        .FetchResetCreditsAsync(null, CancellationToken.None);
+    Console.WriteLine(
+        liveCredits is null
+            ? "Claude 리셋 티켓: 없음 또는 조회 대상 아님"
+            : $"Claude 리셋 티켓 {liveCredits.AvailableCount}장 · " +
+              $"가장 이른 기한 {liveCredits.EarliestExpiresAt:O}");
+    return;
+}
+
 var now = new DateTimeOffset(2026, 7, 24, 12, 0, 0, TimeSpan.FromHours(9));
 var meter = new UsageMeter(
     "test",
@@ -666,6 +679,94 @@ using (var antigravityRequest = new HttpRequestMessage())
         csrfValues.SequenceEqual([antigravityCsrfToken]),
         "Antigravity quota RPC CSRF 헤더");
 }
+
+// ---- 리셋 티켓: Claude 상태 파서 / 선택 규칙 / claim 흐름 (실계정 호출 없음) ----
+const string claudeResetFixture =
+    """
+    {
+      "five_hour": { "utilization": 10, "resets_at": "2026-12-01T16:00:00Z" },
+      "cedar_ember": {
+        "eligible": true,
+        "at_limit": true,
+        "exhausted": ["five_hour"],
+        "next_grant_id": "grant-b",
+        "grants": [
+          {
+            "id": "grant-a", "label": "주간 리셋", "type": "weekly",
+            "resets_total": 2, "resets_left": 2,
+            "ends_at": "2026-12-20T00:00:00Z",
+            "paused": false, "usable_now": true, "use_requires_limit": true
+          },
+          {
+            "id": "grant-b", "label": "5시간 리셋", "type": "session",
+            "resets_total": 1, "resets_left": 1,
+            "ends_at": "2026-12-05T00:00:00Z",
+            "paused": false, "usable_now": true, "use_requires_limit": true
+          },
+          {
+            "id": "grant-c", "label": "만료됨", "type": "session",
+            "resets_total": 1, "resets_left": 1,
+            "ends_at": "2020-01-01T00:00:00Z",
+            "paused": false, "usable_now": false
+          },
+          {
+            "id": "grant-d", "label": "일시중지", "type": "weekly",
+            "resets_total": 1, "resets_left": 1,
+            "ends_at": "2026-12-02T00:00:00Z",
+            "paused": true, "usable_now": false
+          },
+          {
+            "id": "grant-e", "label": "소진", "type": "weekly",
+            "resets_total": 1, "resets_left": 0,
+            "ends_at": "2026-12-01T00:00:00Z",
+            "paused": false, "usable_now": false
+          }
+        ]
+      }
+    }
+    """;
+var claudeResetNow = new DateTimeOffset(
+    2026, 11, 25, 0, 0, 0, TimeSpan.Zero);
+var claudeResetStatus = ClaudeResetCreditParser.Parse(claudeResetFixture);
+Require(claudeResetStatus is not null, "Claude 리셋 티켓 상태 파싱");
+var claudeResetSummary = claudeResetStatus!.ToSummary(claudeResetNow);
+Require(
+    claudeResetSummary?.AvailableCount == 3,
+    "Claude 리셋 티켓 개수는 사용 가능한 grant의 resets_left 합계");
+Require(
+    claudeResetSummary?.EarliestExpiresAt ==
+    DateTimeOffset.Parse("2026-12-05T00:00:00Z"),
+    "Claude 가장 이른 만료는 사용 가능한 티켓 기준");
+Require(
+    ClaudeResetCreditParser.Parse(
+        """{"cedar_ember":{"eligible":false,"ineligible_reason":"surface","grants":[]}}""")
+    is null,
+    "비대상 계정은 리셋 티켓 표시 안 함");
+Require(
+    ClaudeResetCreditParser.Parse("""{"five_hour":{}}""") is null,
+    "cedar_ember 블록 없으면 null");
+Require(
+    ClaudeResetCreditParser.Parse(
+        """{"cedar_ember":{"eligible":true,"grants":[]}}""")
+        !.ToSummary(claudeResetNow) is null,
+    "보유 티켓이 없으면 요약 없음");
+
+var claudeResetViewModel = new ProviderUsageViewModel(
+    new UsageSnapshot(
+        "claude-code",
+        "Claude Code",
+        "C",
+        "test",
+        [],
+        claudeResetNow,
+        "test",
+        ResetCredits: claudeResetSummary),
+    claudeResetNow);
+Require(
+    claudeResetViewModel.ResetCreditSummaryText?.Contains(
+        "리셋 티켓 3장",
+        StringComparison.Ordinal) == true,
+    "Claude 리셋 티켓 카드 문구");
 
 if (args.Contains("--integration", StringComparer.Ordinal))
 {

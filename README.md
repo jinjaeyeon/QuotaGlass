@@ -16,6 +16,11 @@ CLI가 나중에 설치되면 시스템 CLI를 우선 사용합니다.
 저장소가 있으면 해당 `CODEX_HOME`을 먼저 시도하고, 이후 CLI 저장소와 기존
 환경 fallback을 순서대로 시도합니다. 일시적인 app-server 오류는 제한된
 retry/backoff로 재시도합니다.
+
+Claude Code도 보유 중인 리셋 티켓이 있으면 `/api/oauth/usage?cedar_ember=1`
+조회 결과로 개수와 가장 이른 만료 시각을 카드에 표시합니다. 이 조회는 사용량
+조회와 별도 요청이라 실패해도 사용량 표시에는 영향이 없고, 대상 계정이
+아니면 표시하지 않습니다.
 JetBrains AI는 IDE의 로컬 quota 상태에서 월간
 AI Credits와 다음 refill 시각을 읽습니다. Claude Code는 `auth status`로 구독
 로그인을 확인한 뒤, Claude Desktop의 OS 보호 OAuth 캐시, CLI의 OAuth 인증 파일
